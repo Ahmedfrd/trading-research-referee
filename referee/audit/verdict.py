@@ -86,6 +86,19 @@ def testability_problem(prices: pd.DataFrame, spec: StrategySpec) -> str | None:
     """
     available = prices.shape[1]
 
+    # If almost nothing in the spec is supported by the paper, the extractor
+    # filled a schema rather than read a strategy. Backtesting that produces a
+    # number with no meaning, which is exactly the failure mode this tool
+    # exists to prevent.
+    strength = spec.evidence_strength()
+    if strength < 0.25:
+        return (
+            f"Only {strength:.0%} of the extracted fields are supported by "
+            f"anything in the document; the rest are placeholders. This does "
+            f"not appear to describe a tradeable strategy. Refusing to produce "
+            f"a backtest that would look meaningful but mean nothing."
+        )
+
     if available == 0:
         return "No price data could be loaded for this universe."
 

@@ -276,3 +276,26 @@ class StrategySpec(BaseModel):
         walk(self, "")
         order = {Confidence.ASSUMED: 0, Confidence.INFERRED: 1}
         return sorted(found, key=lambda kv: order[kv[1].confidence])
+
+    def evidence_strength(self) -> float:
+        """Fraction of extracted fields the paper actually supports.
+
+        Near zero means the extractor filled the schema without finding
+        anything in the document to justify it — which is what happens when
+        the input is not a strategy paper at all. The testability gate uses
+        this to refuse rather than relying on a human to read the notes.
+        """
+        total = explicit = 0
+
+        def walk(model: BaseModel) -> None:
+            nonlocal total, explicit
+            for _, value in model:
+                if isinstance(value, Sourced):
+                    total += 1
+                    if value.confidence is Confidence.EXPLICIT:
+                        explicit += 1
+                elif isinstance(value, BaseModel):
+                    walk(value)
+
+        walk(self)
+        return explicit / total if total else 0.0

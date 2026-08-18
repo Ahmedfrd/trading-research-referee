@@ -204,7 +204,9 @@ def test_engine_reproduces_aqr_tsmom():
     aqr.index = pd.to_datetime(aqr.index, errors="coerce")
     aqr = aqr[aqr.index.notna()].astype(float)["TSMOM^CM"].resample("ME").last()
 
-    joined = pd.concat([ours.rename("ours"), aqr.rename("aqr")], axis=1).dropna()
+    joined = pd.concat(
+        [ours.rename("ours"), aqr.rename("aqr")], axis=1, sort=True
+    ).dropna()
 
     assert len(joined) > 300, "not enough overlap to validate against"
     assert joined.ours.corr(joined.aqr) > 0.60, "engine diverges from published series"
