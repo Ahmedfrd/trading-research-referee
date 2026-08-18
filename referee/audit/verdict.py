@@ -103,7 +103,11 @@ def testability_problem(prices: pd.DataFrame, spec: StrategySpec) -> str | None:
         return "No price data could be loaded for this universe."
 
     if spec.portfolio.strategy_type.value is StrategyType.CROSS_SECTIONAL:
-        needed = max(20, int(1 / spec.portfolio.top_fraction.value) * 2)
+        # A decile of 21 assets is two assets. To rank a cross-section into
+        # meaningful groups each bucket needs real breadth, so require at
+        # least MIN_PER_BUCKET names in the traded fraction.
+        MIN_PER_BUCKET = 10
+        needed = max(30, int(MIN_PER_BUCKET / spec.portfolio.top_fraction.value))
         if available < needed:
             return (
                 f"This strategy ranks a cross-section and holds the top "

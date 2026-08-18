@@ -20,7 +20,11 @@ from referee.ai.extract import extract_spec, read_pdf
 from referee.ai.generate import UnsafeCode, generate_code
 from referee.audit.verdict import AuditReport, Verdict, run_audit
 from referee.data.loaders import Coverage, load_prices
-from referee.data.universes import commodity_tickers, unobtainable
+from referee.data.universes import (
+    commodity_tickers,
+    unobtainable,
+    us_large_cap_tickers,
+)
 from referee.engine.sandbox import SandboxResult, run_generated_signal
 from referee.spec import AssetClass, StrategySpec
 
@@ -116,6 +120,7 @@ def stage_generate(state: PipelineState, client: LLMClient) -> PipelineState:
 
 UNIVERSE_TICKERS = {
     AssetClass.COMMODITY_FUTURES: commodity_tickers,
+    AssetClass.US_EQUITIES: us_large_cap_tickers,
 }
 
 

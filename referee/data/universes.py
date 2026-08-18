@@ -84,3 +84,32 @@ def unobtainable() -> list[Contract]:
 
 def by_ticker(ticker: str) -> Contract | None:
     return next((c for c in MOP_COMMODITIES if c.ticker == ticker), None)
+
+
+# --------------------------------------------------------------------------
+# US equities
+#
+# Large-cap US names, used by the cross-sectional papers. This is *today's*
+# membership, which is the survivorship-bias limitation stated throughout:
+# companies that failed are absent, which flatters every backtest.
+# --------------------------------------------------------------------------
+
+US_LARGE_CAP: tuple[str, ...] = (
+    "AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "JPM", "JNJ", "V",
+    "PG", "XOM", "UNH", "HD", "MA", "CVX", "ABBV", "PFE", "KO", "PEP",
+    "BAC", "MRK", "COST", "TMO", "WMT", "CSCO", "MCD", "ACN", "ABT", "LIN",
+    "DHR", "ADBE", "TXN", "NEE", "VZ", "NKE", "CMCSA", "PM", "WFC", "BMY",
+    "RTX", "UPS", "T", "SPGI", "HON", "LOW", "INTC", "QCOM", "UNP", "AMGN",
+    "IBM", "CAT", "GS", "BA", "DE", "SBUX", "BLK", "MDT", "GILD", "ADP",
+    "LMT", "MMM", "CVS", "MO", "AXP", "TJX", "SYK", "ISRG", "PLD", "CI",
+    "ZTS", "MDLZ", "DUK", "SO", "CB", "USB", "BDX", "CL", "APD", "ITW",
+    "NSC", "EOG", "SLB", "AON", "SHW", "MMC", "GE", "FDX", "PNC", "EMR",
+    "MET", "TGT", "COP", "ORCL", "CRM", "AMD", "NVDA", "NFLX", "DIS", "PYPL",
+    "F", "GM", "DAL", "AAL", "MAR", "HLT", "YUM", "KMB", "GIS", "K",
+)
+
+DOW_INDEX = ("^DJI",)
+
+
+def us_large_cap_tickers() -> list[str]:
+    return list(US_LARGE_CAP)
