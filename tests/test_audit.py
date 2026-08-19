@@ -246,3 +246,86 @@ def test_verdict_card_renders_for_every_outcome(trending):
     for spec in (time_series_momentum(), short_term_reversal()):
         card = render_verdict_card(run_audit(trending, spec))
         assert "VERDICT:" in card and len(card.splitlines()) > 3
+
+
+# -- The audit must be capable of saying yes -------------------------------
+
+
+@pytest.fixture(scope="module")
+def genuinely_trending() -> pd.DataFrame:
+    """A world where momentum really does persist, in both halves of the sample."""
+    rng = np.random.default_rng(11)
+    idx = pd.bdate_range("1995-01-02", periods=7000)
+    cols = {}
+    for i in range(12):
+        regime = np.repeat(rng.normal(0, 0.0012, len(idx) // 500 + 1), 500)[: len(idx)]
+        cols[f"S{i}"] = 100 * np.exp(np.cumsum(regime + rng.normal(0, 0.006, len(idx))))
+    return pd.DataFrame(cols, index=idx)
+
+
+def test_audit_returns_replicates_when_a_strategy_genuinely_works(genuinely_trending):
+    """The audit must not be a machine that always says no.
+
+    A tool that fails everything is as useless as one that passes everything —
+    and far more likely to be dismissed. If this ever breaks, the verdict logic
+    has become unfalsifiable, not strict.
+    """
+    spec = time_series_momentum()
+    spec.paper.year = 2010  # so the out-of-sample split falls inside the data
+    report = run_audit(genuinely_trending, spec)
+
+    assert report.verdict is Verdict.REPLICATES
+    assert report.failed_critical == []
+    assert report.failed_warning == []
+    assert all(c.passed for c in report.checks if c.applicable)
+
+
+def test_the_same_engine_fails_that_strategy_once_it_cheats(genuinely_trending):
+    """Same data, same strategy, look-ahead introduced: the verdict must flip."""
+    spec = time_series_momentum()
+    spec.paper.year = 2010
+    spec.execution.signal_lag_days = Sourced(
+        value=0, quote="same-bar execution", confidence=Confidence.EXPLICIT
+    )
+    assert run_audit(genuinely_trending, spec).verdict is Verdict.FAILS
+
+
+# -- The replacement validation paper --------------------------------------
+
+
+def test_jegadeesh_titman_spec_is_valid_and_cross_sectional():
+    from referee.papers import cross_sectional_momentum
+    from referee.spec import StrategyType as ST
+
+    spec = cross_sectional_momentum()
+    assert spec.portfolio.strategy_type.value is ST.CROSS_SECTIONAL
+    assert spec.portfolio.top_fraction.value == pytest.approx(0.1)
+    assert spec.signal.skip_days.value == 21, "12-1 momentum skips the recent month"
+    assert spec.evidence_strength() > 0.25
+
+
+@pytest.mark.slow
+def test_engine_reproduces_aqr_us_momentum():
+    """Primary engine validation: our cross-sectional momentum vs AQR's own
+    published US stock momentum factor."""
+    from referee.data.loaders import load_prices
+    from referee.data.universes import us_large_cap_tickers
+    from referee.papers import cross_sectional_momentum
+
+    prices, _ = load_prices(us_large_cap_tickers())
+    ours = run_backtest(prices, cross_sectional_momentum()).monthly()
+
+    aqr = pd.read_excel(
+        "data/cache/aqr_vme_monthly.xlsx", sheet_name="VME Factors",
+        header=21, index_col=0,
+    )
+    aqr.index = pd.to_datetime(aqr.index, errors="coerce")
+    aqr = aqr[aqr.index.notna()].astype(float)["MOMLS_VME_US90"].resample("ME").last()
+
+    joined = pd.concat(
+        [ours.rename("ours"), aqr.rename("aqr")], axis=1, sort=True
+    ).dropna()
+
+    assert len(joined) > 500, "not enough overlap to validate against"
+    assert joined.ours.corr(joined.aqr) > 0.65, "engine diverges from published series"
+    assert joined.ours.mean() > 0 and joined.aqr.mean() > 0

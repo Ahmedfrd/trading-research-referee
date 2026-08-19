@@ -272,6 +272,7 @@ with tabs[0]:
             "Paper",
             list(ALL_PAPERS),
             format_func=lambda k: {
+                "momentum": "Cross-Sectional Momentum (Jegadeesh & Titman 1993)",
                 "tsmom": "Time Series Momentum (Moskowitz, Ooi & Pedersen 2012)",
                 "reversal": "Short-Term Reversal (de Groot, Huij & Zhou)",
                 "technical": "Technical Trading Rules (Brock, Lakonishok & LeBaron 1992)",

@@ -68,13 +68,30 @@ manufacturing exactly the overfitting it exists to detect.
 
 ## Validation
 
-The engine is checked against **AQR's own published TSMOM returns**:
-correlation **0.680** across **331 overlapping months** against their
-commodity-only factor, from an independently written implementation.
+The engine is checked against **AQR's own published factor returns**, from an
+independently written implementation:
+
+| Our strategy | AQR series | Months | Correlation | Sharpe (ours / AQR) |
+|---|---|---|---|---|
+| Cross-sectional momentum | `MOMLS_VME_US90` | 652 | **0.712** | 0.40 / 0.45 |
+| Time-series momentum | `TSMOM^CM` | 331 | **0.680** | 0.24 / 0.44 |
 
 A tool that audits other people's backtests has no business shipping an
-unaudited one. **49 tests**, including the causality of every signal kind,
-cost accounting, drawdown arithmetic, and the AQR reproduction.
+unaudited one. **53 tests**, including the causality of every signal kind,
+cost accounting, drawdown arithmetic, both AQR reproductions — and a test
+that the audit is *capable of passing* a strategy that genuinely works, so it
+cannot silently become a machine that always says no.
+
+## What the reference papers show
+
+| Paper | Verdict | Why |
+|---|---|---|
+| Jegadeesh & Titman (1993) | **WEAKENED** | Real — t=2.90, survives 20bps, broad plateau — but **decayed 80% after publication** |
+| Short-term reversal | **FAILS** | Overwhelmingly real (t=10.20, gross Sharpe 1.35) and **untradeable**: 90x turnover, edge gone by 20bps |
+| Technical trading rules (1992) | **FAILS** | Sharpe 0.05, no edge even before costs, decayed 100% post-publication |
+
+Three distinct failure modes: *real but decayed*, *real but untradeable*,
+*never real*.
 
 ## Running it
 

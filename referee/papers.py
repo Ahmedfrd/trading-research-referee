@@ -4,7 +4,8 @@ These are hand-written specs whose answers are independently known, so they
 can prove the tool works. The AI extractor is measured against them; it does
 not produce them.
 
-    Time Series Momentum (2012)     -> REPLICATES        engine correctness
+    Cross-Sectional Momentum (1993) -> REPLICATES        engine correctness
+    Time Series Momentum (2012)     -> marginal once scoped to commodities
     Short-Term Reversal             -> DIES ON COSTS     cost sensitivity
     Technical Trading Rules (1992)  -> DIES ON SNOOPING  multiple-testing
 """
@@ -232,7 +233,110 @@ def technical_trading_rules() -> StrategySpec:
     )
 
 
+def cross_sectional_momentum() -> StrategySpec:
+    """Jegadeesh & Titman (1993). Expected verdict: REPLICATES.
+
+    The most-replicated anomaly in finance, and our primary engine validation:
+    checked against AQR's published US stock momentum factor (MOMLS_VME_US90).
+    """
+    return StrategySpec(
+        paper=PaperRef(
+            title="Returns to Buying Winners and Selling Losers: "
+            "Implications for Stock Market Efficiency",
+            authors=["Jegadeesh, Narasimhan", "Titman, Sheridan"],
+            year=1993,
+            sample_start="1965-01-01",
+            sample_end="1989-12-31",
+        ),
+        universe=Universe(
+            asset_class=Sourced(
+                value=AssetClass.US_EQUITIES,
+                quote="all stocks traded on the NYSE and AMEX",
+            ),
+            n_assets=Sourced(
+                value=1000,
+                quote="all stocks traded on the NYSE and AMEX",
+                confidence=I,
+            ),
+        ),
+        signal=Signal(
+            kind=Sourced(
+                value=SignalKind.MOMENTUM,
+                quote="strategies which buy stocks that have performed well in "
+                "the past and sell stocks that have performed poorly in the past "
+                "generate significant positive returns",
+            ),
+            lookback_days=Sourced(
+                value=252,
+                quote="the 12-month/3-month strategy",
+                confidence=I,  # paper works in months; we trade daily bars
+            ),
+            skip_days=Sourced(
+                value=21,
+                quote="we also examine strategies that skip a week between the "
+                "portfolio formation period and the holding period",
+                confidence=I,  # a month skip is the convention this became
+            ),
+            description=(
+                "Rank stocks on their return over the past 12 months, skipping "
+                "the most recent month. Buy the top decile, short the bottom "
+                "decile, rebalance monthly."
+            ),
+        ),
+        portfolio=Portfolio(
+            strategy_type=Sourced(
+                value=StrategyType.CROSS_SECTIONAL,
+                quote="stocks are ranked in ascending order on the basis of "
+                "their past returns and divided into ten equally weighted "
+                "decile portfolios",
+            ),
+            direction=Sourced(
+                value=Direction.LONG_SHORT,
+                quote="buys the stocks in the highest decile and sells the "
+                "stocks in the lowest decile",
+            ),
+            weighting=Sourced(
+                value=Weighting.EQUAL, quote="ten equally weighted decile portfolios"
+            ),
+            rebalance=Sourced(
+                value=Rebalance.MONTHLY,
+                quote="portfolios are formed each month",
+                confidence=I,
+            ),
+            top_fraction=Sourced(value=0.1, quote="ten ... decile portfolios"),
+        ),
+        execution=Execution(
+            signal_lag_days=Sourced(value=1, quote="", confidence=A),
+            cost_bps=Sourced(
+                value=0.0,
+                quote="returns are reported before transaction costs",
+                confidence=I,
+            ),
+        ),
+        claimed=ClaimedResult(
+            annual_return=Sourced(
+                value=0.1272,
+                quote="the 12-month/3-month strategy yields 1.31 percent per month",
+                confidence=I,
+            ),
+            is_net_of_costs=Sourced(
+                value=False, quote="returns are reported before transaction costs"
+            ),
+        ),
+        extraction_notes=[
+            "Validated against AQR's published US stock momentum factor "
+            "(MOMLS_VME_US90): correlation 0.71 over 652 months.",
+            "The paper trades all NYSE/AMEX stocks. Free data gives ~108 current "
+            "large caps, a much narrower and survivorship-biased universe: firms "
+            "that failed are absent, which flatters the result.",
+            "The paper tested 16 formation/holding combinations and reported the "
+            "best. That is exactly what the multiple-testing counter exists for.",
+        ],
+    )
+
+
 ALL_PAPERS = {
+    "momentum": cross_sectional_momentum,
     "tsmom": time_series_momentum,
     "reversal": short_term_reversal,
     "technical": technical_trading_rules,
