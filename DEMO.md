@@ -60,15 +60,13 @@ Click *I have reviewed this specification*.
 
 *Run the audit.*
 
-> **WEAKENED.** Not a pass, not a fail.
+> The most-replicated anomaly in finance. It passes look-ahead testing. It
+> survives realistic costs. It works across a broad range of parameters, not
+> one lucky number.
 >
-> It survives look-ahead testing. It survives realistic trading costs. It
-> works across a broad range of parameters, not one lucky number. It's
-> statistically significant at t=2.90.
->
-> And it **decayed 80% after publication** — Sharpe 0.74 before 1993, 0.15
-> after. That's McLean and Pontiff's finding, measured live, on the most
-> famous anomaly in finance.
+> And it **stopped working after it was published**. Sharpe **0.55** on the
+> years Jegadeesh and Titman studied. **−0.02** on everything since. That's
+> McLean and Pontiff's finding, measured live, on the canonical paper.
 
 Open the **Cross-engine agreement** check.
 
@@ -117,11 +115,12 @@ watch the sidebar counter climb.
 
 | Claim | Number |
 |---|---|
-| Engine vs AQR US momentum | corr **0.712**, 652 months, Sharpe 0.40 vs 0.45 |
+| Engine vs AQR US momentum | corr **0.711**, 652 months |
 | Engine vs AQR commodity TSMOM | corr **0.680**, 331 months |
 | Cross-engine agreement | **100%**, correlation 1.000 |
-| Tests | **53** |
-| Momentum post-publication decay | **80%** (Sharpe 0.74 → 0.15) |
+| Tests | **60** |
+| Momentum post-publication | Sharpe **0.55 → −0.02** |
+| Quote fidelity: hand-written vs AI | **31%** vs **100%** |
 | Reversal | t=**10.20**, gross Sharpe 1.35, dies at 20bps, 90x turnover |
 | Significance bar at 26 tests | t > **3.10** |
 
@@ -145,3 +144,24 @@ watch the sidebar counter climb.
 > Three layers. The spec can't represent a negative execution lag. The static
 > check rejects future-reading operations before anything runs. And the audit
 > re-runs with the future blinded to prove the past doesn't change.
+
+
+---
+
+## The strongest thing you can say
+
+If you only get one extra minute, use it on this.
+
+> I hand-wrote the reference specifications myself, because I assumed a human
+> transcribing a paper would be more reliable than an AI reading one.
+>
+> Then I built a verifier that checks every quoted sentence actually exists in
+> the paper, and ran it on both.
+>
+> **The AI scored 100%. I scored 31%** — nine of my thirteen quotes were
+> paraphrased from memory and did not appear anywhere in the paper. One of
+> them made me record the wrong transaction-cost assumption, which made three
+> other parameters wrong.
+>
+> The tool caught its own author doing the exact thing it was built to detect.
+> That check now runs automatically, and a test keeps it honest.

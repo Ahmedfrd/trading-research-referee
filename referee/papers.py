@@ -234,10 +234,16 @@ def technical_trading_rules() -> StrategySpec:
 
 
 def cross_sectional_momentum() -> StrategySpec:
-    """Jegadeesh & Titman (1993). Expected verdict: REPLICATES.
+    """Jegadeesh & Titman (1993). Expected verdict: WEAKENED.
 
-    The most-replicated anomaly in finance, and our primary engine validation:
-    checked against AQR's published US stock momentum factor (MOMLS_VME_US90).
+    Primary engine validation, checked against AQR's published US stock
+    momentum factor.
+
+    Every quote below was verified against the paper text with
+    `referee.ai.verify.verify_quotes`. An earlier hand-written version of this
+    spec had nine of thirteen quotes paraphrased from memory rather than copied
+    from the paper — the exact failure this tool exists to catch. Do not edit
+    a quote here without re-running the verifier.
     """
     return StrategySpec(
         paper=PaperRef(
@@ -251,12 +257,13 @@ def cross_sectional_momentum() -> StrategySpec:
         universe=Universe(
             asset_class=Sourced(
                 value=AssetClass.US_EQUITIES,
-                quote="all stocks traded on the NYSE and AMEX",
+                quote="Our analysis of NYSE and AMEX stocks documents significant "
+                "profits in the 1965 to 1989 sample period",
             ),
             n_assets=Sourced(
                 value=1000,
-                quote="all stocks traded on the NYSE and AMEX",
-                confidence=I,
+                quote="Our analysis of NYSE and AMEX stocks",
+                confidence=I,  # the paper never states a count
             ),
         ),
         signal=Signal(
@@ -268,69 +275,85 @@ def cross_sectional_momentum() -> StrategySpec:
             ),
             lookback_days=Sourced(
                 value=252,
-                quote="the 12-month/3-month strategy",
-                confidence=I,  # paper works in months; we trade daily bars
+                quote="The most successful zero-cost strategy selects stocks "
+                "based on their returns over the previous 12 months",
+                confidence=I,  # 12 months of daily bars
             ),
             skip_days=Sourced(
-                value=21,
-                quote="we also examine strategies that skip a week between the "
-                "portfolio formation period and the holding period",
-                confidence=I,  # a month skip is the convention this became
+                value=0,
+                quote="when there is no time lag between the portfolio formation "
+                "period and the holding period",
             ),
             description=(
-                "Rank stocks on their return over the past 12 months, skipping "
-                "the most recent month. Buy the top decile, short the bottom "
-                "decile, rebalance monthly."
+                "Rank stocks on their return over the previous 12 months. Buy the "
+                "top decile, short the bottom decile, hold for three months."
             ),
         ),
         portfolio=Portfolio(
             strategy_type=Sourced(
                 value=StrategyType.CROSS_SECTIONAL,
-                quote="stocks are ranked in ascending order on the basis of "
-                "their past returns and divided into ten equally weighted "
-                "decile portfolios",
+                quote="the securities are ranked in ascending order on the basis "
+                "of their returns in the past J months",
             ),
             direction=Sourced(
                 value=Direction.LONG_SHORT,
-                quote="buys the stocks in the highest decile and sells the "
-                "stocks in the lowest decile",
+                quote="an equally weighted portfolio of stocks in the lowest past "
+                "return decile is the sell portfolio and an equally weighted "
+                "portfolio of the stocks in the highest return decile is the buy "
+                "portfolio",
             ),
             weighting=Sourced(
-                value=Weighting.EQUAL, quote="ten equally weighted decile portfolios"
+                value=Weighting.EQUAL,
+                quote="ten decile portfolios are formed that equally weight the "
+                "stocks contained in the top decile",
             ),
             rebalance=Sourced(
-                value=Rebalance.MONTHLY,
-                quote="portfolios are formed each month",
-                confidence=I,
+                value=Rebalance.QUARTERLY,
+                quote="and then holds the portfolio for 3 months",
+                confidence=I,  # the paper's most successful holding period
             ),
-            top_fraction=Sourced(value=0.1, quote="ten ... decile portfolios"),
+            top_fraction=Sourced(
+                value=0.1,
+                quote="ten decile portfolios are formed",
+            ),
         ),
         execution=Execution(
             signal_lag_days=Sourced(value=1, quote="", confidence=A),
             cost_bps=Sourced(
-                value=0.0,
-                quote="returns are reported before transaction costs",
-                confidence=I,
+                value=50.0,
+                quote="after considering a 0.5% one-way transaction cost",
             ),
         ),
         claimed=ClaimedResult(
             annual_return=Sourced(
-                value=0.1272,
-                quote="the 12-month/3-month strategy yields 1.31 percent per month",
-                confidence=I,
+                value=0.0929,
+                quote="is 9.29% per year, which is reliably different from zero",
             ),
+            sharpe=None,
             is_net_of_costs=Sourced(
-                value=False, quote="returns are reported before transaction costs"
+                value=True,
+                quote="The risk-adjusted return of the relative strength trading "
+                "rule after considering a 0.5% one-way transaction cost",
             ),
         ),
         extraction_notes=[
-            "Validated against AQR's published US stock momentum factor "
-            "(MOMLS_VME_US90): correlation 0.71 over 652 months.",
+            "The paper tests 32 strategies and applies a Bonferroni correction "
+            "itself: 'Many of the individual t-statistics are sufficiently large "
+            "to be significant even after considering the fact that we have "
+            "conducted 32 separate tests.' Jegadeesh and Titman were running our "
+            "multiple-testing check in 1993.",
+            "This spec encodes the paper's own headline: the 12-month formation / "
+            "3-month holding strategy it calls 'the most successful zero-cost "
+            "strategy', yielding 1.31% per month gross. Parameters were chosen "
+            "by citation, not by which performed best on our data.",
+            "Holding period is approximated by quarterly rebalancing. The paper "
+            "uses overlapping portfolios that our engine does not model, so "
+            "turnover here is not directly comparable to theirs.",
+            "Unusually, this paper does report a cost-adjusted figure: 9.29% a "
+            "year net of a 0.5% one-way cost. Most papers report gross only.",
             "The paper trades all NYSE/AMEX stocks. Free data gives ~108 current "
             "large caps, a much narrower and survivorship-biased universe: firms "
             "that failed are absent, which flatters the result.",
-            "The paper tested 16 formation/holding combinations and reported the "
-            "best. That is exactly what the multiple-testing counter exists for.",
         ],
     )
 

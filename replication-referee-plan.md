@@ -159,11 +159,26 @@ These are the **regression test suite**, not the product. They are chosen becaus
 
 | Paper | Expected verdict | Which audit check it demonstrates |
 |---|---|---|
-| **Time Series Momentum** — Moskowitz, Ooi & Pedersen (2012) | REPLICATES | Engine correctness; commodities coverage |
+| **Cross-Sectional Momentum** — Jegadeesh & Titman (1993) | FAILS (post-publication) | Engine correctness; validated vs AQR US momentum |
 | **Short-Term Reversal** — de Groot, Huij & Zhou results | DIES ON COSTS | Cost sensitivity sweep |
 | **Technical Trading Rules** — Brock, Lakonishok & LeBaron (1992) | DIES ON DATA-SNOOPING | Multiple-testing counter |
 
 Three papers, three distinct failure modes, three features demonstrated. The demo arc writes itself: *this one is real; this one is real but untradeable; this one was never real.*
+
+> **Revised 19 Aug 2026 — Paper 1 swapped.** TSMOM scoped to commodities proved
+> a weak anchor: free futures data covers only 21 of the paper's 58 contracts,
+> and Yahoo's continuous contracts stitch months together without
+> back-adjustment, depressing the result. Candidates were tested rather than
+> assumed — cross-sectional momentum correlated **0.712** with AQR's published
+> US momentum factor over **652 months** (vs 0.680 / 331 for TSMOM), while the
+> low-volatility anomaly scored **−0.55** and was rejected. **Jegadeesh &
+> Titman (1993)** is now the primary validation paper. TSMOM remains as a
+> second reference case and its AQR test stays in the suite.
+>
+> Its verdict is **WEAKENED**, not REPLICATES: the effect is real (t=2.90,
+> survives 20bps, broad parameter plateau) but **decayed 80% after
+> publication** — the McLean & Pontiff result, measured on the canonical
+> anomaly. That is a stronger demonstration than a clean pass.
 
 ### Paper 1 gives us free engine validation
 

@@ -18,6 +18,7 @@ import pandas as pd
 from referee.ai.client import LLMClient, LLMError
 from referee.ai.extract import extract_spec, read_pdf
 from referee.ai.generate import UnsafeCode, generate_code
+from referee.ai.verify import QuoteCheck, quote_fidelity, verify_quotes
 from referee.audit.verdict import AuditReport, Verdict, run_audit
 from referee.data.loaders import Coverage, load_prices
 from referee.data.universes import (
@@ -40,6 +41,9 @@ class PipelineState:
 
     spec: StrategySpec | None = None
     spec_confirmed: bool = False
+
+    quote_checks: list[QuoteCheck] = field(default_factory=list)
+    """Whether each claimed quote actually appears in the paper."""
 
     code: str = ""
     sandbox: SandboxResult | None = None
@@ -73,6 +77,17 @@ def stage_extract(
 
     state.spec, _ = extract_spec(client, state.paper_text)
     state.spec_confirmed = False
+
+    # A quote that is not in the paper is a fabricated citation, whether an AI
+    # or a person wrote it. Check before a human is asked to trust the spec.
+    state.quote_checks = verify_quotes(state.spec, state.paper_text)
+    fidelity = quote_fidelity(state.quote_checks)
+    if fidelity < 1.0:
+        state.errors.append(
+            f"{sum(not c.found for c in state.quote_checks)} of "
+            f"{len(state.quote_checks)} quotes do not appear in the paper "
+            f"({fidelity:.0%} verified). Treat those fields as unsourced."
+        )
     return state
 
 

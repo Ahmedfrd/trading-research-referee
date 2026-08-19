@@ -58,6 +58,11 @@ a detectable bug instead of a silently wrong number.
 | Multiple testing | Every variant tried raises the significance bar. **The tool gets harder to please the more you fiddle with it.** |
 | Cross-engine agreement | Our hand-written engine vs the AI-generated code, from the same spec. If two independent implementations disagree, one is wrong. |
 
+Plus a check that runs before any of them: **quote verification**. Every
+non-assumed field claims a verbatim sentence from the paper, and the tool
+confirms that sentence actually exists. A field citing words nobody wrote is a
+fabricated citation, whether an AI or a person produced it — see below.
+
 ## Two modes, deliberately separated
 
 **Replication** locks every parameter to the paper's own values and answers
@@ -71,13 +76,14 @@ manufacturing exactly the overfitting it exists to detect.
 The engine is checked against **AQR's own published factor returns**, from an
 independently written implementation:
 
-| Our strategy | AQR series | Months | Correlation | Sharpe (ours / AQR) |
-|---|---|---|---|---|
-| Cross-sectional momentum | `MOMLS_VME_US90` | 652 | **0.712** | 0.40 / 0.45 |
-| Time-series momentum | `TSMOM^CM` | 331 | **0.680** | 0.24 / 0.44 |
+| Our strategy | AQR series | Months | Correlation |
+|---|---|---|---|
+| Momentum, AQR's construction (12mo, skip 1mo) | `MOMLS_VME_US90` | 652 | **0.711** |
+| Momentum, the paper's construction (12mo, hold 3mo) | `MOMLS_VME_US90` | 652 | **0.689** |
+| Time-series momentum | `TSMOM^CM` | 331 | **0.680** |
 
 A tool that audits other people's backtests has no business shipping an
-unaudited one. **53 tests**, including the causality of every signal kind,
+unaudited one. **60 tests**, including the causality of every signal kind,
 cost accounting, drawdown arithmetic, both AQR reproductions — and a test
 that the audit is *capable of passing* a strategy that genuinely works, so it
 cannot silently become a machine that always says no.
@@ -86,7 +92,7 @@ cannot silently become a machine that always says no.
 
 | Paper | Verdict | Why |
 |---|---|---|
-| Jegadeesh & Titman (1993) | **WEAKENED** | Real — t=2.90, survives 20bps, broad plateau — but **decayed 80% after publication** |
+| Jegadeesh & Titman (1993) | **FAILS** | Survives look-ahead, costs and parameter sweeps, but **stopped working after publication**: Sharpe 0.55 in-sample, −0.02 after 1993 |
 | Short-term reversal | **FAILS** | Overwhelmingly real (t=10.20, gross Sharpe 1.35) and **untradeable**: 90x turnover, edge gone by 20bps |
 | Technical trading rules (1992) | **FAILS** | Sharpe 0.05, no edge even before costs, decayed 100% post-publication |
 
@@ -106,8 +112,30 @@ API key. The backend sits behind a `Protocol`, so swapping to the Messages
 API is one class.
 
 ```bash
-.venv/bin/pytest              # 49 tests
+.venv/bin/pytest              # 60 tests
 ```
+
+## The verifier caught its own author
+
+The reference specs were originally hand-written, on the assumption that a
+human transcribing a paper is more trustworthy than an AI reading one. When
+the real Jegadeesh & Titman PDF was finally run through the pipeline, the
+comparison was not close:
+
+| Spec for the same paper | Quotes verified against the text |
+|---|---|
+| Hand-written by the author | **31%** — 9 of 13 quotes did not exist |
+| Extracted by Claude | **100%** — 0 of 12 fabricated |
+
+The human had paraphrased from memory: a cited cost assumption of *"returns
+are reported before transaction costs"* appears nowhere in the paper, which in
+fact reports a 9.29% annual return net of a 0.5% one-way cost. Three
+parameters were wrong as a result.
+
+Quote verification now runs automatically after extraction, and a test asserts
+the shipped reference spec stays at 100%. The lesson is the project's own
+thesis applied to itself: **do not trust a claim because of who made it —
+check it against the source.**
 
 ## Stated limitations
 
@@ -137,6 +165,6 @@ referee/
   audit/           the six checks and the verdict
   pipeline.py      the five stages
 prompts/           versioned system prompts, shown in the UI
-tests/             49 tests
+tests/             60 tests
 app.py             Streamlit interface
 ```

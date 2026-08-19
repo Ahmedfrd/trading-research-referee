@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.INFO)
 
 from referee.ai.client import ClaudeCLIClient, LLMError, load_prompt
 from referee.ai.generate import check_code
+from referee.ai.verify import quote_fidelity, unverified
 from referee.audit.verdict import VERDICT_MEANING, Verdict, run_audit
 from referee.data.loaders import coverage_table, load_prices
 from referee.data.universes import (
@@ -193,14 +194,31 @@ def render_spec_review(spec: StrategySpec, editable: bool) -> StrategySpec:
     """Show every field with its evidence. Assumptions first."""
     queue = spec.fields_needing_review()
     strength = spec.evidence_strength()
+    checks = state().quote_checks
 
-    a, b, c = st.columns(3)
-    a.metric("Supported by the paper", f"{strength:.0%}")
-    b.metric("Needs review", len(queue))
-    c.metric(
+    cols = st.columns(4 if checks else 3)
+    cols[0].metric("Supported by the paper", f"{strength:.0%}")
+    cols[1].metric("Needs review", len(queue))
+    cols[2].metric(
         "Pure assumptions",
         sum(1 for _, s in queue if s.confidence is Confidence.ASSUMED),
     )
+    if checks:
+        cols[3].metric("Quotes verified", f"{quote_fidelity(checks):.0%}")
+
+    missing = unverified(checks)
+    if missing:
+        st.error(
+            f"**{len(missing)} quote(s) do not appear in the paper.** A field "
+            "citing a sentence nobody wrote is a fabricated citation. Treat "
+            "these as unsourced."
+        )
+        for m in missing:
+            st.markdown(f"- `{m.path}` — \"{m.quote[:120]}\"")
+    elif checks:
+        st.success(
+            f"All {len(checks)} quoted fields were found verbatim in the paper."
+        )
 
     if strength < 0.25:
         st.error(

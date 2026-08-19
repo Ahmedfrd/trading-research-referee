@@ -24,7 +24,7 @@ from referee.audit.verdict import Verdict, run_audit
 from referee.audit.verdict import testability_problem as check_testability
 from referee.engine.backtest import compute_signal, run_backtest
 from referee.papers import short_term_reversal, technical_trading_rules, time_series_momentum
-from referee.spec import Confidence, SignalKind, Sourced
+from referee.spec import Confidence, Rebalance, SignalKind, Sourced
 
 
 @pytest.fixture(scope="module")
@@ -300,20 +300,48 @@ def test_jegadeesh_titman_spec_is_valid_and_cross_sectional():
     spec = cross_sectional_momentum()
     assert spec.portfolio.strategy_type.value is ST.CROSS_SECTIONAL
     assert spec.portfolio.top_fraction.value == pytest.approx(0.1)
-    assert spec.signal.skip_days.value == 21, "12-1 momentum skips the recent month"
     assert spec.evidence_strength() > 0.25
+
+    # The paper's stated headline: 12-month formation, 3-month holding, no lag.
+    # Not the modern 12-1 convention — that is a later construction, and
+    # encoding it here would be replicating a strategy the paper never ran.
+    assert spec.signal.lookback_days.value == 252
+    assert spec.signal.skip_days.value == 0
+    assert spec.portfolio.rebalance.value is Rebalance.QUARTERLY
+    # The paper reports a cost-adjusted figure, unusually.
+    assert spec.execution.cost_bps.value == pytest.approx(50.0)
+    assert spec.claimed.is_net_of_costs.value is True
+
+
+def aqr_momentum_spec():
+    """A spec matching AQR's *own* momentum construction, not the paper's.
+
+    AQR's MOMLS_VME_US90 is 12-month momentum skipping the most recent month.
+    Jegadeesh & Titman's base strategies use 6 months and skip nothing. Both
+    are momentum; they are not the same strategy, so validating the engine
+    against AQR requires AQR's parameters, not the paper's.
+    """
+    from referee.papers import cross_sectional_momentum
+
+    spec = cross_sectional_momentum()
+    spec.signal.lookback_days = Sourced(
+        value=252, quote="12-month momentum", confidence=Confidence.INFERRED
+    )
+    spec.signal.skip_days = Sourced(
+        value=21, quote="skipping the most recent month", confidence=Confidence.INFERRED
+    )
+    return spec
 
 
 @pytest.mark.slow
 def test_engine_reproduces_aqr_us_momentum():
-    """Primary engine validation: our cross-sectional momentum vs AQR's own
-    published US stock momentum factor."""
+    """Primary engine validation: our momentum vs AQR's own published US
+    stock momentum factor, run on AQR's construction."""
     from referee.data.loaders import load_prices
     from referee.data.universes import us_large_cap_tickers
-    from referee.papers import cross_sectional_momentum
 
     prices, _ = load_prices(us_large_cap_tickers())
-    ours = run_backtest(prices, cross_sectional_momentum()).monthly()
+    ours = run_backtest(prices, aqr_momentum_spec()).monthly()
 
     aqr = pd.read_excel(
         "data/cache/aqr_vme_monthly.xlsx", sheet_name="VME Factors",
