@@ -6,3 +6,4 @@ data/cache/
 *.db
 .DS_Store
 outputs/
+data/papers/*.pdf
