@@ -41,10 +41,37 @@ class Coverage:
     reason: str = ""
 
 
+# Tickers that returned nothing are remembered for this long, so a dead
+# symbol is not re-requested on every run. Short enough that a genuine outage
+# heals on its own.
+NEGATIVE_CACHE_DAYS = 7
+
+
 def _cache_path(ticker: str) -> Path:
     # '=' and '^' are legal in tickers but awkward in filenames.
-    safe = ticker.replace("=", "_eq_").replace("^", "_idx_").replace("/", "_")
-    return CACHE_DIR / f"{safe}.parquet"
+    return CACHE_DIR / f"{_safe_name(ticker)}.parquet"
+
+
+def _safe_name(ticker: str) -> str:
+    # '=' and '^' are legal in tickers but awkward in filenames.
+    return ticker.replace("=", "_eq_").replace("^", "_idx_").replace("/", "_")
+
+
+def _miss_path(ticker: str) -> Path:
+    return CACHE_DIR / f"{_safe_name(ticker)}.missing"
+
+
+def _recently_missing(ticker: str) -> bool:
+    import time
+
+    path = _miss_path(ticker)
+    if not path.exists():
+        return False
+    age_days = (time.time() - path.stat().st_mtime) / 86400
+    if age_days > NEGATIVE_CACHE_DAYS:
+        path.unlink(missing_ok=True)
+        return False
+    return True
 
 
 def _fetch(tickers: list[str]) -> dict[str, pd.Series]:
@@ -95,12 +122,21 @@ def load_prices(
     series: dict[str, pd.Series] = {}
     missing: list[str] = []
 
+    known_dead: list[str] = []
     for t in tickers:
         path = _cache_path(t)
         if path.exists() and not refresh:
             series[t] = pd.read_parquet(path)["close"]
+        elif _recently_missing(t) and not refresh:
+            known_dead.append(t)
         else:
             missing.append(t)
+
+    if known_dead:
+        log.info(
+            "skipping %d ticker(s) known to have no data: %s",
+            len(known_dead), ", ".join(known_dead),
+        )
 
     if missing:
         log.info("downloading %d ticker(s): %s", len(missing), ", ".join(missing))
@@ -108,6 +144,7 @@ def load_prices(
         for t in missing:
             s = fetched.get(t)
             if s is None or s.empty:
+                _miss_path(t).touch()  # remember the miss; do not ask again
                 continue
             s.name = "close"
             s.to_frame().to_parquet(_cache_path(t))
@@ -119,7 +156,13 @@ def load_prices(
     for t in tickers:
         s = series.get(t)
         if s is None or s.empty:
-            coverage.append(Coverage(t, ok=False, reason="no data returned"))
+            coverage.append(
+                Coverage(
+                    t,
+                    ok=False,
+                    reason="no data available from the provider (delisted or renamed)",
+                )
+            )
             continue
 
         window = s.loc[start:end] if (start or end) else s

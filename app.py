@@ -22,7 +22,12 @@ from referee.ai.client import ClaudeCLIClient, LLMError, load_prompt
 from referee.ai.generate import check_code
 from referee.audit.verdict import VERDICT_MEANING, Verdict, run_audit
 from referee.data.loaders import coverage_table, load_prices
-from referee.data.universes import MOP_COMMODITIES, commodity_tickers, unobtainable
+from referee.data.universes import (
+    MOP_COMMODITIES,
+    commodity_tickers,
+    unobtainable,
+    us_large_cap_tickers,
+)
 from referee.engine.backtest import run_backtest
 from referee.papers import ALL_PAPERS
 from referee.pipeline import (
@@ -32,7 +37,7 @@ from referee.pipeline import (
     stage_generate,
     stage_run_sandboxed,
 )
-from referee.spec import Confidence, StrategySpec
+from referee.spec import AssetClass, Confidence, StrategySpec
 
 st.set_page_config(page_title="The Replication Referee", page_icon="⚖️", layout="wide")
 
@@ -58,6 +63,12 @@ CONFIDENCE_BADGE = {
 @st.cache_data(show_spinner="Loading price history…")
 def get_commodity_prices():
     prices, coverage = load_prices(commodity_tickers())
+    return prices, coverage_table(coverage)
+
+
+@st.cache_data(show_spinner="Loading US equity history…")
+def get_equity_prices():
+    prices, coverage = load_prices(us_large_cap_tickers())
     return prices, coverage_table(coverage)
 
 
@@ -115,7 +126,7 @@ def render_checks(report) -> None:
                     xaxis_title="one-way cost (basis points)",
                     yaxis_title="Sharpe ratio",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             elif c.name == "Parameter sensitivity" and c.data.get("grid"):
                 grid = c.data["grid"]
@@ -133,7 +144,7 @@ def render_checks(report) -> None:
                     xaxis_title="lookback (days) — red is the published value",
                     yaxis_title="Sharpe ratio",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             elif c.name == "Out-of-sample" and c.applicable:
                 a, b = st.columns(2)
@@ -145,12 +156,25 @@ def render_checks(report) -> None:
                 )
 
             elif c.name == "Multiple testing":
-                a, b, d = st.columns(3)
-                a.metric("t-statistic", f"{c.data['t_statistic']:.2f}")
-                b.metric("Bar (1 test)", f"{c.data['naive_bar']:.2f}")
-                d.metric(
-                    f"Bar ({c.data['n_tests']} tests)", f"{c.data['adjusted_bar']:.2f}"
-                )
+                n = c.data["n_tests"]
+                if n == 1:
+                    a, b = st.columns(2)
+                    a.metric("t-statistic", f"{c.data['t_statistic']:.2f}")
+                    b.metric("Bar to clear", f"{c.data['naive_bar']:.2f}")
+                    st.caption(
+                        "Test a second variant and this bar rises. The tool gets "
+                        "harder to please the more you try."
+                    )
+                else:
+                    a, b, d = st.columns(3)
+                    a.metric("t-statistic", f"{c.data['t_statistic']:.2f}")
+                    b.metric("Bar after 1 test", f"{c.data['naive_bar']:.2f}")
+                    d.metric(
+                        f"Bar after {n} tests",
+                        f"{c.data['adjusted_bar']:.2f}",
+                        delta=f"{c.data['adjusted_bar'] - c.data['naive_bar']:+.2f}",
+                        delta_color="inverse",
+                    )
 
 
 def render_equity_curve(result) -> None:
@@ -162,7 +186,7 @@ def render_equity_curve(result) -> None:
         height=340, margin=dict(t=10, b=10),
         yaxis_title="growth of 1", yaxis_type="log",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_spec_review(spec: StrategySpec, editable: bool) -> StrategySpec:
@@ -452,8 +476,8 @@ with tabs[3]:
                         height=340, xaxis_title="lookback (days)",
                         yaxis_title="Sharpe ratio", margin=dict(t=10, b=10),
                     )
-                    st.plotly_chart(fig, use_container_width=True)
-                    st.dataframe(sweep, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
+                    st.dataframe(sweep, width="stretch")
 
             if s.report:
                 st.divider()
@@ -483,18 +507,47 @@ with tabs[4]:
         "silently produces a number."
     )
 
-    prices, table = get_commodity_prices()
-    a, b, c = st.columns(3)
-    a.metric("Contracts in the paper", len(MOP_COMMODITIES))
-    b.metric("Obtained", int(table.usable.sum()))
-    c.metric("No free source", len(unobtainable()))
+    s = state()
+    spec_class = s.spec.universe.asset_class.value if s.spec else None
 
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    universe = st.radio(
+        "Universe",
+        ["Commodity futures", "US large caps"],
+        horizontal=True,
+        index=1 if spec_class is AssetClass.US_EQUITIES else 0,
+        help="Defaults to the universe the loaded paper actually trades.",
+    )
+
+    if universe == "Commodity futures":
+        prices, table = get_commodity_prices()
+        a, b, c = st.columns(3)
+        a.metric("Contracts in the paper", len(MOP_COMMODITIES))
+        b.metric("Obtained", int(table.usable.sum()))
+        c.metric("No free source", len(unobtainable()))
+        st.caption(
+            "The three unobtainable contracts (Gasoil, Nickel, Zinc) are LME and "
+            "ICE London contracts with no free daily feed. They are kept in the "
+            "list rather than deleted, so the gap is reported instead of implied "
+            "away."
+        )
+    else:
+        prices, table = get_equity_prices()
+        a, b, c = st.columns(3)
+        a.metric("Names attempted", len(table))
+        b.metric("Usable", int(table.usable.sum()))
+        c.metric("History from", str(prices.index[0].date()) if len(prices) else "—")
+        st.caption(
+            "The paper trades every NYSE and AMEX stock. This is a much narrower "
+            "set of current large caps — see the survivorship note below."
+        )
+
+    st.dataframe(table, width="stretch", hide_index=True)
 
     st.markdown("#### Stated limitations")
     st.warning(
         "**Survivorship bias.** Free data gives today's index members, not "
         "historical membership, so backtests silently include only survivors. "
+        "Companies that failed are absent, which flatters every equity result. "
         "There is no clean free fix.\n\n"
         "**Futures roll gaps.** Yahoo's continuous contracts stitch months "
         "together without back-adjustment, adding noise at each roll. This "
