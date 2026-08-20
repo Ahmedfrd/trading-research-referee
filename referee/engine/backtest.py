@@ -128,10 +128,28 @@ def _time_series_positions(signal: pd.DataFrame, direction: Direction) -> pd.Dat
 def _cross_sectional_positions(
     signal: pd.DataFrame, direction: Direction, top_fraction: float
 ) -> pd.DataFrame:
-    """Rank the universe each day; trade the extremes."""
-    ranks = signal.rank(axis=1, pct=True, na_option="keep")
-    longs = (ranks > 1 - top_fraction).astype(float)
-    shorts = (ranks <= top_fraction).astype(float)
+    """Rank the universe each day; trade the extremes.
+
+    Both legs hold the same number of names by construction. Percentile
+    thresholds do not guarantee that: with six assets the smallest percentile
+    rank is 1/6, so `rank <= 0.1` selects nothing while `rank > 0.9` selects
+    one — a long/short book quietly becomes long-only, and gross-exposure
+    normalisation hides the fact. Counting ranks instead keeps the legs
+    balanced at every universe size.
+    """
+    valid = signal.notna().sum(axis=1)
+
+    # At least one name a side, and never so many that the legs overlap.
+    per_side = (valid * top_fraction).round().clip(lower=1)
+    per_side = pd.concat([per_side, valid // 2], axis=1).min(axis=1).astype(int)
+
+    # method="first" breaks ties deterministically, so the two legs cannot
+    # both claim the same asset when signals are equal.
+    best = signal.rank(axis=1, ascending=False, method="first", na_option="keep")
+    worst = signal.rank(axis=1, ascending=True, method="first", na_option="keep")
+
+    longs = best.le(per_side, axis=0).astype(float)
+    shorts = worst.le(per_side, axis=0).astype(float)
 
     if direction is Direction.LONG_ONLY:
         pos = longs
@@ -262,26 +280,44 @@ def compute_stats(returns: pd.Series, turnover: pd.Series | None = None) -> dict
 
     A strategy is not described by its return alone; the drawdown and turnover
     are what determine whether it is actually holdable and tradeable.
+
+    **Sharpe here is raw return over volatility, not excess over the risk-free
+    rate.** For the self-financing long/short books this tool is built around,
+    raw and excess returns are the same thing, so the two definitions agree.
+    For a long-only strategy they do not: this overstates Sharpe by roughly
+    `risk_free / volatility` — about 0.13 at a 1.9% risk-free rate and 15%
+    volatility. `check_long_only_sharpe` in the audit layer flags that case
+    rather than letting it pass silently.
     """
     r = returns.dropna()
-    if r.empty or r.std() == 0:
+    if r.empty:
         return {
             "annual_return": 0.0,
             "annual_vol": 0.0,
             "sharpe": 0.0,
             "max_drawdown": 0.0,
             "hit_rate": 0.0,
-            "n_days": len(r),
+            "n_days": 0,
             "annual_turnover": 0.0,
         }
 
+    # Zero volatility makes Sharpe undefined, but return, drawdown and hit
+    # rate are all still perfectly well defined. Only Sharpe is special-cased;
+    # zeroing the rest would report a steadily losing strategy as flat.
+    sd = float(r.std())
+
     curve = (1 + r).cumprod()
-    drawdown = curve / curve.cummax() - 1
+    # Initial capital of 1.0 is itself a peak. Without clipping, a strategy
+    # that loses money from its first day never registers the drawdown from
+    # the money you actually put in: -10% then -10% would report -10%, not
+    # the -19% you are genuinely down.
+    peak = curve.cummax().clip(lower=1.0)
+    drawdown = curve / peak - 1
 
     stats = {
         "annual_return": float(r.mean() * TRADING_DAYS),
-        "annual_vol": float(r.std() * np.sqrt(TRADING_DAYS)),
-        "sharpe": float(r.mean() / r.std() * np.sqrt(TRADING_DAYS)),
+        "annual_vol": float(sd * np.sqrt(TRADING_DAYS)),
+        "sharpe": float(r.mean() / sd * np.sqrt(TRADING_DAYS)) if sd > 0 else 0.0,
         "max_drawdown": float(drawdown.min()),
         "hit_rate": float((r > 0).mean()),
         "n_days": int(len(r)),

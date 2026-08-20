@@ -76,14 +76,29 @@ manufacturing exactly the overfitting it exists to detect.
 The engine is checked against **AQR's own published factor returns**, from an
 independently written implementation:
 
-| Our strategy | AQR series | Months | Correlation |
+| Our strategy | Reference series | Months | Correlation |
 |---|---|---|---|
-| Momentum, AQR's construction (12mo, skip 1mo) | `MOMLS_VME_US90` | 652 | **0.711** |
-| Momentum, the paper's construction (12mo, hold 3mo) | `MOMLS_VME_US90` | 652 | **0.689** |
-| Time-series momentum | `TSMOM^CM` | 331 | **0.680** |
+| Momentum | Ken French `UMD` (Dartmouth) | 652 | **0.738** |
+| Momentum | AQR `MOMLS_VME_US90` | 652 | **0.729** |
+| Time-series momentum | AQR `TSMOM^CM` | 331 | **0.680** |
+| *AQR vs Ken French* | *two professional providers of the same factor* | *652* | ***0.917*** |
+
+That last row is the context that matters: two well-resourced firms building
+the same published factor from full CRSP data agree at 0.917, not 1.0. That is
+the realistic ceiling for any independent implementation, and we reach ~80% of
+it using 108 survivorship-biased tickers from a free data source.
+
+Independent checks on the components:
+
+| Component | Checked against | Result |
+|---|---|---|
+| Multiple-testing bar | `scipy.stats.norm.ppf` | exact to 1e-12 |
+| Sharpe, volatility, hit rate | hand-computed closed forms | exact |
+| Max drawdown | hand-computed peak-to-trough | exact, after a fix |
+| Price data | CRSP total market (Ken French) | corr **0.944**, vol 16.4% vs 15.8% |
 
 A tool that audits other people's backtests has no business shipping an
-unaudited one. **60 tests**, including the causality of every signal kind,
+unaudited one. **84 tests**, including the causality of every signal kind,
 cost accounting, drawdown arithmetic, both AQR reproductions — and a test
 that the audit is *capable of passing* a strategy that genuinely works, so it
 cannot silently become a machine that always says no.
@@ -112,7 +127,7 @@ API key. The backend sits behind a `Protocol`, so swapping to the Messages
 API is one class.
 
 ```bash
-.venv/bin/pytest              # 60 tests
+.venv/bin/pytest              # 84 tests
 ```
 
 ## The verifier caught its own author
@@ -136,6 +151,26 @@ Quote verification now runs automatically after extraction, and a test asserts
 the shipped reference spec stays at 100%. The lesson is the project's own
 thesis applied to itself: **do not trust a claim because of who made it —
 check it against the source.**
+
+## Bugs the verification pass found
+
+Validating against external sources surfaced three real defects, all now
+fixed and covered by tests:
+
+1. **Max drawdown ignored your starting capital.** The equity curve began at
+   the first return rather than at 1.0, so a strategy losing money from day one
+   measured its drawdown from an already-depressed peak: −10% then −10%
+   reported −10%, not the −19% you were actually down.
+2. **Zero volatility zeroed every statistic.** A degenerate-input guard fired
+   on `std == 0` and blanked return, drawdown and hit rate along with Sharpe —
+   reporting a steadily losing strategy as flat.
+3. **Long/short legs were not balanced.** Percentile thresholds gave the long
+   leg 11 names and the short leg 10 out of 108: a persistent ~5% net long
+   position in a supposedly market-neutral book, worth **+0.9%/yr of borrowed
+   equity beta** against a +3.1% gross strategy return. Nearly a third of the
+   reported "momentum profit" was market exposure. Fixing it *raised*
+   correlation with both reference factors, which is the confirmation that it
+   was a real bug.
 
 ## Stated limitations
 
@@ -165,6 +200,6 @@ referee/
   audit/           the six checks and the verdict
   pipeline.py      the five stages
 prompts/           versioned system prompts, shown in the UI
-tests/             60 tests
+tests/             84 tests
 app.py             Streamlit interface
 ```

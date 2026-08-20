@@ -115,10 +115,13 @@ watch the sidebar counter climb.
 
 | Claim | Number |
 |---|---|
-| Engine vs AQR US momentum | corr **0.711**, 652 months |
+| Engine vs Ken French UMD | corr **0.738**, 652 months |
+| Engine vs AQR US momentum | corr **0.729**, 652 months |
+| AQR vs Ken French (the ceiling) | corr **0.917** |
+| Survivorship bias, measured | **+6.2%/yr** vs CRSP |
 | Engine vs AQR commodity TSMOM | corr **0.680**, 331 months |
 | Cross-engine agreement | **100%**, correlation 1.000 |
-| Tests | **60** |
+| Tests | **84** |
 | Momentum post-publication | Sharpe **0.55 → −0.02** |
 | Quote fidelity: hand-written vs AI | **31%** vs **100%** |
 | Reversal | t=**10.20**, gross Sharpe 1.35, dies at 20bps, 90x turnover |

@@ -212,3 +212,122 @@ def test_engine_reproduces_aqr_tsmom():
     assert joined.ours.corr(joined.aqr) > 0.60, "engine diverges from published series"
     # Same economic direction: both must be profitable over the shared window.
     assert joined.ours.mean() > 0 and joined.aqr.mean() > 0
+
+
+# -- Drawdown must count the money you actually put in ----------------------
+
+
+@pytest.mark.parametrize(
+    "returns,expected,why",
+    [
+        ([-0.1, -0.1], -0.19, "losing from day one is a drawdown on your capital"),
+        ([0.5, -0.5], -0.5, "peak inside the series"),
+        ([0.2, -0.1, 0.05, -0.3], -0.3385, "peak then trough"),
+        ([-0.5], -0.5, "a single losing day"),
+        ([0.1, 0.1], 0.0, "never below the starting capital"),
+    ],
+)
+def test_max_drawdown_counts_initial_capital_as_a_peak(returns, expected, why):
+    """A curve starting at 1.0 means 1.0 is a peak.
+
+    Without this, a strategy that loses money immediately reports a drawdown
+    measured from its already-depressed first value — flattering exactly the
+    strategies that deserve it least.
+    """
+    r = pd.Series(returns, index=pd.bdate_range("2020-01-01", periods=len(returns)))
+    assert compute_stats(r)["max_drawdown"] == pytest.approx(expected, abs=1e-4), why
+
+
+def test_required_t_statistic_matches_scipy():
+    """Our Bonferroni bar must equal the reference implementation exactly."""
+    sps = pytest.importorskip("scipy.stats")
+    from referee.audit.checks import required_t_statistic
+
+    for n in (1, 5, 26, 32, 100, 1000):
+        assert required_t_statistic(n) == pytest.approx(
+            sps.norm.ppf(1 - 0.05 / (2 * n)), abs=1e-12
+        )
+
+
+# -- Cross-sectional legs must be balanced ---------------------------------
+
+
+@pytest.mark.parametrize("n_assets", [6, 10, 20, 51, 108])
+@pytest.mark.parametrize("fraction", [0.1, 0.2, 0.5])
+def test_long_and_short_legs_hold_equal_counts(n_assets, fraction):
+    """A long/short spec must not quietly become long-only.
+
+    Percentile thresholds break this on small universes: with six assets the
+    smallest percentile rank is 1/6, so `rank <= 0.1` matches nothing while
+    `rank > 0.9` matches one. Gross-exposure normalisation then hides the
+    imbalance, and the backtest reports a directional bet as market-neutral.
+    """
+    from referee.engine.backtest import _cross_sectional_positions
+    from referee.spec import Direction
+
+    signal = pd.DataFrame(
+        [list(range(n_assets))], columns=[f"A{i}" for i in range(n_assets)]
+    )
+    row = _cross_sectional_positions(signal, Direction.LONG_SHORT, fraction).iloc[0]
+
+    longs, shorts = int((row > 0).sum()), int((row < 0).sum())
+    assert longs == shorts, f"{longs} long vs {shorts} short"
+    assert longs >= 1, "a leg must hold at least one name"
+    assert longs + shorts <= n_assets, "legs must not overlap"
+
+
+def test_short_leg_picks_the_worst_and_long_leg_the_best():
+    from referee.engine.backtest import _cross_sectional_positions
+    from referee.spec import Direction
+
+    signal = pd.DataFrame([[10.0, -5.0, 3.0, -8.0]], columns=list("ABCD"))
+    row = _cross_sectional_positions(signal, Direction.LONG_SHORT, 0.25).iloc[0]
+
+    assert row["A"] > 0, "highest signal must be long"
+    assert row["D"] < 0, "lowest signal must be short"
+
+
+# -- Causality, tested properly --------------------------------------------
+
+
+def test_changing_a_price_cannot_alter_earlier_positions(synthetic):
+    """The real causality test: the future must not reach backwards.
+
+    An earlier version of this test fed the engine a `shift(-1)` signal and
+    concluded it was cheating. That was wrong — the signal itself was
+    non-causal, so the result said nothing about the engine. This perturbs a
+    single price at time T and requires every weight before T to be identical.
+    """
+    spec = time_series_momentum()
+    spec.portfolio.rebalance.value = Rebalance.DAILY
+
+    base = run_backtest(synthetic, spec)
+
+    tampered = synthetic.copy()
+    t = len(tampered) - 300
+    tampered.iloc[t:, 0] *= 3.0  # a violent move, far in the future
+
+    after = run_backtest(tampered, spec)
+
+    cutoff = tampered.index[t]
+    before_base = base.weights.loc[:cutoff].iloc[:-1]
+    before_after = after.weights.loc[:cutoff].iloc[:-1]
+
+    pd.testing.assert_frame_equal(before_base, before_after)
+
+
+def test_a_later_price_does_change_later_positions(synthetic):
+    """Sanity check on the test above: the perturbation must matter somewhere,
+    or the causality test would pass trivially."""
+    spec = time_series_momentum()
+    spec.portfolio.rebalance.value = Rebalance.DAILY
+
+    tampered = synthetic.copy()
+    t = len(tampered) - 300
+    tampered.iloc[t:, 0] *= 3.0
+
+    base = run_backtest(synthetic, spec).weights
+    after = run_backtest(tampered, spec).weights
+    common = base.index.intersection(after.index)
+
+    assert not base.loc[common].equals(after.loc[common])
