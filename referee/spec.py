@@ -107,6 +107,21 @@ class Weighting(str, Enum):
     SIGNAL_PROPORTIONAL = "signal_proportional"
 
 
+class SchemaFit(str, Enum):
+    """Whether this schema can express the paper's strategy at all.
+
+    The controlled vocabularies are deliberately narrow, so some papers cannot
+    be represented. Recording that as a field rather than as prose lets the
+    testability gate act on it: a strategy we cannot express must not be
+    quietly approximated into one we can and then backtested as if it were the
+    paper's.
+    """
+
+    EXACT = "exact"  # the spec faithfully represents the paper
+    APPROXIMATE = "approximate"  # a simplification, described in extraction_notes
+    UNREPRESENTABLE = "unrepresentable"  # the schema cannot express this strategy
+
+
 class Rebalance(str, Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
@@ -237,6 +252,14 @@ class StrategySpec(BaseModel):
     portfolio: Portfolio
     execution: Execution
     claimed: ClaimedResult = Field(default_factory=ClaimedResult)
+
+    schema_fit: SchemaFit = Field(
+        default=SchemaFit.EXACT,
+        description="Whether this schema can express the paper's strategy. Use "
+        "'approximate' when a field was forced to a nearest-available value, and "
+        "'unrepresentable' when the strategy cannot be expressed at all. Explain "
+        "either in extraction_notes.",
+    )
 
     extraction_notes: list[str] = Field(
         default_factory=list,

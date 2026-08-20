@@ -31,11 +31,21 @@ the strategy work, not what you would do. If the paper is silent, say so.
    the paper could mean two things, record the reading you chose and say what
    the alternative was.
 
-4. **Refuse rather than approximate.** If the paper describes a strategy that
-   cannot be expressed in this schema — it needs accounting data, order-book
-   data, or a signal with no equivalent in the allowed `SignalKind` values —
-   say so plainly in `extraction_notes` and pick the closest available value.
-   Do not silently bend a different strategy into the schema.
+4. **Refuse rather than approximate — and record it in `schema_fit`.** The
+   vocabularies here are deliberately narrow, so some papers do not fit.
+
+   - `exact` — the schema represents the paper's strategy faithfully.
+   - `approximate` — you forced a field to a nearest-available value. Say
+     which field and what the paper actually specified, in `extraction_notes`.
+   - `unrepresentable` — the strategy cannot be expressed at all: the signal
+     has no equivalent in `SignalKind`, it needs accounting or order-book
+     data, or the asset class is missing from `AssetClass`.
+
+   **This field is acted upon, not just read.** An `unrepresentable` spec is
+   refused before any backtest runs, because a number produced from a
+   different strategy than the paper describes is worse than no number. Saying
+   `exact` when you have bent the paper to fit is the second-worst error you
+   can make, after a fabricated quote.
 
 ## Fields that decide whether the replication is valid
 

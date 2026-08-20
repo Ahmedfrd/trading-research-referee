@@ -357,3 +357,64 @@ def test_engine_reproduces_aqr_us_momentum():
     assert len(joined) > 500, "not enough overlap to validate against"
     assert joined.ours.corr(joined.aqr) > 0.65, "engine diverges from published series"
     assert joined.ours.mean() > 0 and joined.aqr.mean() > 0
+
+
+# -- Schema fit: a strategy we cannot express must not be approximated ------
+
+
+def test_unrepresentable_strategy_is_refused_before_any_backtest(trending):
+    """The gap real papers exposed.
+
+    Running five arXiv momentum papers through extraction, the model
+    repeatedly and correctly flagged that our vocabularies could not express
+    what the paper actually did — an R-ratio from an ARMA-GARCH model, a
+    signal that unifies time-series and cross-sectional momentum, an Indian
+    equity universe with no matching asset class. Those notes were prose, so
+    the gate never saw them and the paper was backtested anyway, producing a
+    confident number for a strategy the paper never described.
+    """
+    from referee.spec import SchemaFit
+
+    spec = time_series_momentum()
+    spec.schema_fit = SchemaFit.UNREPRESENTABLE
+    spec.extraction_notes = [
+        "The ranking criterion is a reward-to-risk tail ratio from an "
+        "ARMA(1,1)-GARCH(1,1) model, which SignalKind cannot express."
+    ]
+
+    problem = check_testability(trending, spec)
+    assert problem is not None
+    assert "cannot be expressed" in problem
+    assert "ARMA" in problem, "the reported reason must reach the user"
+
+    report = run_audit(trending, spec)
+    assert report.verdict is Verdict.NOT_TESTABLE
+    assert report.checks == [], "nothing may be measured once we have refused"
+
+
+def test_approximate_fit_is_allowed_through(trending):
+    """An acknowledged simplification is still testable; it is not a refusal."""
+    from referee.spec import SchemaFit
+
+    spec = time_series_momentum()
+    spec.schema_fit = SchemaFit.APPROXIMATE
+    assert check_testability(trending, spec) is None
+
+
+def test_specs_default_to_exact_fit():
+    """Older specs without the field must keep validating."""
+    from referee.spec import SchemaFit, StrategySpec
+
+    spec = time_series_momentum()
+    assert spec.schema_fit is SchemaFit.EXACT
+    restored = StrategySpec.model_validate_json(spec.model_dump_json())
+    assert restored.schema_fit is SchemaFit.EXACT
+
+
+def test_extraction_prompt_documents_every_schema_fit_value():
+    """The field is only useful if the model is told what it means."""
+    from referee.ai.client import load_prompt
+
+    text = load_prompt("extract_spec")
+    for value in ("exact", "approximate", "unrepresentable"):
+        assert value in text

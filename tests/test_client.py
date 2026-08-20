@@ -80,7 +80,7 @@ def test_unparseable_replies_are_retried():
 
 def test_giving_up_raises_rather_than_returning_junk():
     client = FakeLLM(["bad"] * 3)
-    with pytest.raises(LLMError, match="no valid output after 3 attempts"):
+    with pytest.raises(LLMError, match="Could not read this document"):
         structured(client, "sys", "user", Toy, attempts=3)
 
 

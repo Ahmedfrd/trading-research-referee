@@ -22,7 +22,7 @@ from referee.audit.checks import (
     check_parameter_sensitivity,
 )
 from referee.engine.backtest import BacktestResult, run_backtest
-from referee.spec import StrategySpec, StrategyType
+from referee.spec import SchemaFit, StrategySpec, StrategyType
 
 
 class Verdict(str, Enum):
@@ -90,6 +90,15 @@ def testability_problem(prices: pd.DataFrame, spec: StrategySpec) -> str | None:
     # filled a schema rather than read a strategy. Backtesting that produces a
     # number with no meaning, which is exactly the failure mode this tool
     # exists to prevent.
+    if spec.schema_fit is SchemaFit.UNREPRESENTABLE:
+        detail = spec.extraction_notes[0] if spec.extraction_notes else ""
+        return (
+            "The extractor reported that this strategy cannot be expressed in "
+            "the specification schema, so any backtest would be of a different "
+            "strategy than the paper describes. "
+            + (f"Reported reason: {detail[:220]}" if detail else "")
+        )
+
     strength = spec.evidence_strength()
     if strength < 0.25:
         return (

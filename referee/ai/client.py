@@ -212,4 +212,9 @@ def structured(
                 f"Return corrected JSON only. No prose, no markdown fences."
             )
 
-    raise LLMError(f"no valid output after {attempts} attempts. Last error:\n{last_error}")
+    raise LLMError(
+        f"Could not read this document into a valid strategy specification "
+        f"after {attempts} attempts. This usually means it does not describe a "
+        f"tradeable strategy, or describes one the schema cannot express.\n\n"
+        f"Last validation error:\n{last_error}"
+    )

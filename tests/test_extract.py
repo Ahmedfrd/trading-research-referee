@@ -104,5 +104,5 @@ def test_the_paper_text_reaches_the_model():
 
 def test_a_model_that_never_returns_valid_json_raises():
     client = FakeLLM(["nonsense"] * 3)
-    with pytest.raises(LLMError, match="no valid output"):
+    with pytest.raises(LLMError, match="Could not read this document"):
         extract_spec(client, "paper text", attempts=3)
