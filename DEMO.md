@@ -60,13 +60,23 @@ Click *I have reviewed this specification*.
 
 *Run the audit.*
 
-> The most-replicated anomaly in finance. It passes look-ahead testing. It
-> survives realistic costs. It works across a broad range of parameters, not
-> one lucky number.
+> The most-replicated anomaly in finance. It passes look-ahead testing and it
+> survives realistic costs.
 >
-> And it **stopped working after it was published**. Sharpe **0.55** on the
-> years Jegadeesh and Titman studied. **−0.02** on everything since. That's
+> And it **stopped working after it was published**. Sharpe **0.35** on the
+> years Jegadeesh and Titman studied. **−0.07** on everything since. That's
 > McLean and Pontiff's finding, measured live, on the canonical paper.
+
+Then point at the coverage note at the bottom of the card, before anyone else
+does:
+
+> It says FAILS, and I'll tell you why that verdict is only half about the
+> paper. We tested **108 stocks; Jegadeesh and Titman used the whole NYSE and
+> AMEX**. Momentum lives in the small names and the ones that went bust —
+> exactly what a list of today's survivors leaves out. Run my own audit
+> arithmetic over Ken French's proper factor and momentum **passes**. The tool
+> prints that caveat itself rather than letting me quietly take credit for a
+> harsh-looking result.
 
 Open the **Cross-engine agreement** check.
 
@@ -78,7 +88,7 @@ Open the **Cross-engine agreement** check.
 
 Reset session → load **Short-Term Reversal** → confirm → audit.
 
-> Gross Sharpe **1.35**. Seventeen percent a year. t-statistic **10.2** —
+> Gross Sharpe **1.29**. Sixteen percent a year. t-statistic **9.7** —
 > this effect is beyond question real.
 >
 > And it **fails**. It turns over ninety times a year, and the edge is gone
@@ -115,16 +125,17 @@ watch the sidebar counter climb.
 
 | Claim | Number |
 |---|---|
-| Engine vs Ken French UMD | corr **0.738**, 652 months |
-| Engine vs AQR US momentum | corr **0.729**, 652 months |
+| Engine vs Ken French UMD | corr **0.718**, 663 months |
+| Engine vs AQR US momentum | corr **0.719**, 652 months |
 | AQR vs Ken French (the ceiling) | corr **0.917** |
 | Survivorship bias, measured | **+6.2%/yr** vs CRSP |
+| Universe attenuation | our Sharpe **0.24** vs UMD **0.49**, same 663 months |
 | Engine vs AQR commodity TSMOM | corr **0.680**, 331 months |
-| Cross-engine agreement | **100%**, correlation 1.000 |
-| Tests | **84** |
-| Momentum post-publication | Sharpe **0.55 → −0.02** |
+| Cross-engine agreement | **100%**, correlation 1.000, 1.1M values compared |
+| Tests | **199** |
+| Momentum post-publication | Sharpe **0.35 → −0.07** |
 | Quote fidelity: hand-written vs AI | **31%** vs **100%** |
-| Reversal | t=**10.20**, gross Sharpe 1.35, dies at 20bps, 90x turnover |
+| Reversal | t=**9.69**, gross Sharpe 1.29, dies at 20bps, 90x turnover |
 | Significance bar at 26 tests | t > **3.10** |
 
 ## Questions you will be asked
@@ -133,11 +144,28 @@ watch the sidebar counter climb.
 > We trade 108 current large caps; they trade the full NYSE/AMEX universe
 > including firms that no longer exist. Correlation 0.71 over 652 months says
 > we're measuring the same effect; the level differs because the universe does.
+> Widening it to 487 names made the correlation better and the Sharpe worse,
+> because the extra breadth lands after 2000 — momentum's weak era.
 
 **"Isn't survivorship bias fatal here?"**
-> It inflates every equity result, including mine. I state it rather than
-> hide it. It cuts *against* my headline finding, though — momentum decayed
-> 80% even on a universe biased in its favour.
+> It inflates every equity result, including mine, and I measured how much.
+> Against Ken French's full-CRSP factor my universe captures about **half**
+> the Sharpe — 0.24 against 0.49 over the same 663 months. That's enough to
+> turn a real effect insignificant, which is why every verdict reached on a
+> fraction of a paper's universe prints that caveat on the card.
+
+**"Everything fails. Isn't your tool just broken?"** — *the question to invite*
+> That was my own first suspicion, so I went looking for the bug. I found
+> five, and fixed them. But the reason nothing replicates isn't the engine —
+> it's the data. Run my own audit arithmetic over Ken French's momentum
+> factor and it **passes** both checks my momentum spec fails: t=4.63 against
+> a 1.96 bar, 53% of its Sharpe retained after publication. So the engine
+> agrees momentum is real when you give it a real universe. On 108 surviving
+> mega-caps it can't see the effect, and it says so instead of pretending.
+>
+> I could have gone hunting for a construction that produced a REPLICATES for
+> the demo. That is precisely the behaviour this tool exists to detect, so I
+> reported the negative result instead.
 
 **"Why not just use the Claude API?"**
 > The pipeline talks to an interface, not a vendor. It runs on the Claude Code

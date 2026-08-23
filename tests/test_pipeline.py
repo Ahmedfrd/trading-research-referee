@@ -123,3 +123,28 @@ def test_full_pipeline_from_confirmed_spec_to_verdict(small_prices):
     assert state.report is not None
     cross = next(c for c in state.report.checks if c.name == "Cross-engine agreement")
     assert cross.applicable, "generated code should have been compared to the engine"
+
+
+def test_an_unsupported_asset_class_refuses_instead_of_crashing():
+    """No data is a reason to refuse, not a reason to raise.
+
+    A paper on Indian equities extracts to an asset class with no configured
+    universe, so it reached the audit with `prices` still unset and raised
+    ValueError — in the UI, a button that silently did nothing.
+    """
+    from referee.audit.verdict import Verdict
+    from referee.spec import AssetClass, Sourced
+
+    state = PipelineState()
+    state.spec = time_series_momentum()
+    state.spec.universe.asset_class = Sourced(
+        value=AssetClass.HK_EQUITIES, quote="stocks listed in Hong Kong"
+    )
+    stage_confirm(state)
+    stage_load_data(state)
+    stage_audit(state)
+
+    assert state.prices is None
+    assert state.report is not None, "the audit must produce a report, not raise"
+    assert state.report.verdict is Verdict.NOT_TESTABLE
+    assert "no universe configured" in state.report.reason

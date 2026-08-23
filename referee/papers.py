@@ -1,13 +1,28 @@
-"""The three reference papers — a regression suite, not the product.
+"""The four reference papers — a regression suite, not the product.
 
 These are hand-written specs whose answers are independently known, so they
 can prove the tool works. The AI extractor is measured against them; it does
 not produce them.
 
-    Cross-Sectional Momentum (1993) -> REPLICATES        engine correctness
-    Time Series Momentum (2012)     -> marginal once scoped to commodities
-    Short-Term Reversal             -> DIES ON COSTS     cost sensitivity
-    Technical Trading Rules (1992)  -> DIES ON SNOOPING  multiple-testing
+Verdicts below are what the tool actually returns on the data we can obtain,
+measured rather than intended:
+
+    Cross-Sectional Momentum (1993) -> FAILS   on our universe; see caveat
+    Time Series Momentum (2012)     -> FAILS   on significance alone (t=1.16)
+    Short-Term Reversal             -> FAILS   dies on costs, as designed
+    Technical Trading Rules (1992)  -> FAILS   dies on costs
+
+**Read the first two with care.** Both fail for reasons that belong to our
+data rather than to the papers. Ken French's own UMD series, built from full
+CRSP, scores a full-sample Sharpe of 0.46 (t=4.63) and retains 53% of its
+in-sample Sharpe after 1993 — it passes both checks our momentum spec fails.
+We measure 0.20 on 108 current large caps, because momentum lives in the
+smaller and the dead names that a survivorship-biased mega-cap list excludes.
+Time-series momentum is depressed the same way by un-roll-adjusted futures.
+
+The honest reading is that a FAILS here is partly a statement about the
+universe. `tests/test_universe_power.py` measures that attenuation directly
+rather than leaving it as a caveat in prose.
 """
 
 from __future__ import annotations
@@ -35,9 +50,15 @@ I = Confidence.INFERRED
 
 
 def time_series_momentum() -> StrategySpec:
-    """Moskowitz, Ooi & Pedersen (2012). Expected verdict: REPLICATES.
+    """Moskowitz, Ooi & Pedersen (2012). Measured verdict: FAILS.
 
-    Validated against AQR's own published TSMOM^CM monthly series.
+    Validated against AQR's own published TSMOM^CM monthly series, which it
+    tracks at correlation 0.68. It passes look-ahead, costs, out-of-sample and
+    parameter sensitivity, and fails significance alone: Sharpe 0.22 over 27.8
+    years gives t=1.16 against a 1.96 bar. AQR's own series is far stronger.
+    The gap is Yahoo's continuous contracts, which stitch months together
+    without back-adjustment, plus 3 of the paper's 24 contracts having no free
+    feed at all.
     """
     return StrategySpec(
         paper=PaperRef(
@@ -101,7 +122,7 @@ def time_series_momentum() -> StrategySpec:
 
 
 def short_term_reversal() -> StrategySpec:
-    """de Groot, Huij & Zhou. Expected verdict: DIES ON COSTS.
+    """de Groot, Huij & Zhou. Measured verdict: FAILS, on costs.
 
     Gross +61.7 bps/week on the 1,500 largest US stocks; -103.7 bps net.
     The sign flip comes purely from trading costs.
@@ -171,7 +192,13 @@ def short_term_reversal() -> StrategySpec:
 
 
 def technical_trading_rules() -> StrategySpec:
-    """Brock, Lakonishok & LeBaron (1992). Expected verdict: DIES ON SNOOPING.
+    """Brock, Lakonishok & LeBaron (1992). Measured verdict: FAILS, on costs.
+
+    Note the multiple-testing counter is *not* what fails it here: at one
+    variant the strategy is already insignificant (t=0.28) and already dead at
+    5bps. The snooping story needs the user to sweep variants in the UI.
+    The out-of-sample check is N/A — our Dow history starts in 1992, the
+    publication year, so there is no pre-publication window to compare with.
 
     Found 26 technical rules that worked. Sullivan, Timmermann & White (1999)
     re-examined them across the full universe of rules those 26 were drawn
@@ -234,10 +261,17 @@ def technical_trading_rules() -> StrategySpec:
 
 
 def cross_sectional_momentum() -> StrategySpec:
-    """Jegadeesh & Titman (1993). Expected verdict: WEAKENED.
+    """Jegadeesh & Titman (1993). Measured verdict: FAILS — with a caveat.
 
     Primary engine validation, checked against AQR's published US stock
-    momentum factor.
+    momentum factor, which it tracks at correlation 0.73.
+
+    The verdict is FAILS on out-of-sample, parameter sensitivity and
+    significance. Do not read that as "momentum is not real": Ken French's UMD
+    over the same window scores Sharpe 0.49 to our 0.11, and passes both the
+    checks we fail. The strategy is faithful to the paper (12-month formation,
+    no skip, quarterly holding, the paper's own 0.5% one-way cost); the
+    universe is not, and cannot be with free data.
 
     Every quote below was verified against the paper text with
     `referee.ai.verify.verify_quotes`. An earlier hand-written version of this

@@ -186,8 +186,24 @@ def stage_run_sandboxed(state: PipelineState, timeout: int = 60) -> PipelineStat
 
 def stage_audit(state: PipelineState) -> PipelineState:
     """Run the six checks and produce the verdict."""
-    if state.spec is None or state.prices is None:
-        raise ValueError("need a spec and prices to audit")
+    if state.spec is None:
+        raise ValueError("need a spec to audit")
+
+    # No data is a reason to refuse, not a reason to crash. An unsupported
+    # asset class -- a paper on Indian equities, say -- reaches this point
+    # with prices still unset, and the honest answer is the same one the
+    # testability gate gives for every other limit we know about.
+    if state.prices is None or state.prices.empty:
+        detail = state.errors[-1] if state.errors else (
+            "No price data could be loaded for this universe."
+        )
+        state.report = AuditReport(
+            verdict=Verdict.NOT_TESTABLE,
+            checks=[],
+            spec=state.spec,
+            reason=detail,
+        )
+        return state
 
     state.variants_tested += 1
     generated = state.sandbox.signal if (state.sandbox and state.sandbox.ok) else None

@@ -418,3 +418,99 @@ def test_extraction_prompt_documents_every_schema_fit_value():
     text = load_prompt("extract_spec")
     for value in ("exact", "approximate", "unrepresentable"):
         assert value in text
+
+
+# -- The out-of-sample check must not manufacture decay ---------------------
+#
+# Both defects below produced a user-facing "Decayed 100% after publication"
+# finding on strategies where no such thing had happened.
+
+
+def _split_returns(in_mean, out_mean, in_days, out_days, pub_year, seed=3):
+    """Daily returns with a controlled drift each side of the publication split."""
+    rng = np.random.default_rng(seed)
+    split = pd.Timestamp(f"{pub_year}-12-31")
+    before = pd.Series(
+        rng.normal(in_mean, 0.01, in_days),
+        index=pd.bdate_range(end=split, periods=in_days),
+    )
+    after = pd.Series(
+        rng.normal(out_mean, 0.01, out_days),
+        index=pd.bdate_range(start=split + pd.Timedelta(days=1), periods=out_days),
+    )
+    return pd.concat([before, after])
+
+
+class _Returns:
+    """Minimal stand-in for BacktestResult; the check reads only `returns`."""
+
+    def __init__(self, returns):
+        self.returns = returns
+        self.stats = {}
+
+
+def _spec_published(year):
+    class _Spec:
+        class paper:
+            pass
+
+    _Spec.paper.year = year
+    return _Spec
+
+
+def test_improving_out_of_sample_is_not_reported_as_decay():
+    """A losing in-sample period is not a baseline to decay from.
+
+    `retained` was hard-coded to 0.0 whenever in-sample Sharpe was
+    non-positive, so a strategy that lost money in the paper's own window and
+    made money afterwards was reported as having "Decayed 100%".
+    """
+    result = _Returns(_split_returns(-0.0004, +0.0009, 2000, 2000, 2010))
+    check = check_out_of_sample(None, _spec_published(2010), result)
+
+    assert check.data["in_sample_sharpe"] < 0 < check.data["out_sample_sharpe"]
+    assert check.applicable is False, "cannot measure decay without an in-sample edge"
+    assert "Decayed" not in check.headline
+
+
+def test_losing_in_both_periods_is_named_accurately():
+    """Never worked is a different finding from stopped working."""
+    result = _Returns(_split_returns(-0.0004, -0.0005, 2000, 2000, 2010))
+    check = check_out_of_sample(None, _spec_published(2010), result)
+
+    assert check.passed is False
+    assert check.severity is Severity.CRITICAL
+    assert "either period" in check.headline
+
+
+def test_a_few_weeks_of_history_cannot_support_a_decay_finding():
+    """The 252-day bar applies on both sides of the split, not just after it.
+
+    Brock, Lakonishok & LeBaron published in 1992 and our Dow history starts
+    in January 1992, leaving 54 in-sample days — enough, before this guard,
+    to report a Sharpe of -3.83 and a 100% decay.
+    """
+    result = _Returns(_split_returns(-0.002, +0.0003, 54, 8000, 1992))
+    check = check_out_of_sample(None, _spec_published(1992), result)
+
+    assert check.applicable is False
+    assert "pre-publication" in check.headline
+
+
+@pytest.mark.parametrize(
+    "in_mean, out_mean, expect_pass, expect_severity",
+    [
+        (0.0012, 0.0002, False, Severity.WARNING),  # genuine decay
+        (0.0008, 0.0009, True, Severity.INFO),      # genuine persistence
+    ],
+)
+def test_genuine_decay_and_persistence_still_classify(
+    in_mean, out_mean, expect_pass, expect_severity
+):
+    """The guards above must not blunt the check's actual job."""
+    result = _Returns(_split_returns(in_mean, out_mean, 2000, 2000, 2010))
+    check = check_out_of_sample(None, _spec_published(2010), result)
+
+    assert check.applicable is True
+    assert check.passed is expect_pass
+    assert check.severity is expect_severity

@@ -206,6 +206,10 @@ def check_costs(
 # 3. In-sample vs post-publication
 # --------------------------------------------------------------------------
 
+# Minimum history required on *each* side of the publication split. A Sharpe
+# ratio estimated from less than a year of daily returns is not a measurement.
+MIN_WINDOW_DAYS = 252
+
 
 def check_out_of_sample(
     prices: pd.DataFrame, spec: StrategySpec, result: BacktestResult
@@ -232,7 +236,7 @@ def check_out_of_sample(
 
     before, after = returns.loc[:split], returns.loc[split:]
 
-    if len(after) < 252:
+    if len(after) < MIN_WINDOW_DAYS:
         return CheckResult(
             "Out-of-sample", None, Severity.WARNING,
             "Too little post-publication data",
@@ -242,20 +246,64 @@ def check_out_of_sample(
             data={"publication_year": pub_year, "post_days": len(after)},
         )
 
+    # The same bar applies on the other side. A Sharpe measured over a handful
+    # of days is noise, and comparing against it manufactures a decay finding
+    # out of nothing -- a paper published the same year our price history
+    # starts would otherwise be judged on a few weeks of "in-sample" data.
+    if len(before) < MIN_WINDOW_DAYS:
+        return CheckResult(
+            "Out-of-sample", None, Severity.WARNING,
+            "Too little pre-publication data",
+            f"Only {len(before)} trading days of history before {pub_year}, so "
+            f"there is no reliable in-sample figure to compare against. At "
+            f"least a year is needed on both sides of the split.",
+            applicable=False,
+            data={"publication_year": pub_year, "pre_days": len(before)},
+        )
+
     def sharpe(r: pd.Series) -> float:
         return float(r.mean() / r.std() * np.sqrt(252)) if r.std() else 0.0
 
     s_in, s_out = sharpe(before), sharpe(after)
-    retained = s_out / s_in if s_in > 0 else 0.0
 
     data = {
         "publication_year": pub_year,
         "in_sample_sharpe": s_in,
         "out_sample_sharpe": s_out,
-        "retained": retained,
+        "retained": None,
         "in_sample_days": len(before),
         "out_sample_days": len(after),
     }
+
+    # Retention is only meaningful against a positive baseline. Dividing by a
+    # non-positive in-sample Sharpe either flips the sign or -- for two losing
+    # periods -- yields a healthy-looking positive ratio, so the two cases are
+    # separated out and named for what they actually are.
+    if s_in <= 0:
+        if s_out <= 0:
+            return CheckResult(
+                "Out-of-sample", False, Severity.CRITICAL,
+                f"No edge in either period (Sharpe {s_in:.2f} -> {s_out:.2f})",
+                f"The strategy lost money over the years the authors studied "
+                f"({s_in:.2f}) and has gone on losing money since ({s_out:.2f}). "
+                f"This is not post-publication decay — the claimed effect is "
+                f"absent from our data throughout.",
+                data=data,
+            )
+        return CheckResult(
+            "Out-of-sample", None, Severity.WARNING,
+            f"Cannot measure decay — no in-sample edge (Sharpe {s_in:.2f} -> {s_out:.2f})",
+            f"The strategy earned {s_in:.2f} over the period the authors "
+            f"studied and {s_out:.2f} since. There is no positive in-sample "
+            f"result to decay from, so this check cannot answer its question. "
+            f"That we could not reproduce the effect in the paper's own window "
+            f"is itself worth a reviewer's attention.",
+            applicable=False,
+            data=data,
+        )
+
+    retained = s_out / s_in
+    data["retained"] = retained
 
     if s_out <= 0:
         return CheckResult(

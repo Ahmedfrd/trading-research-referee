@@ -72,6 +72,35 @@ class AuditReport:
             ]
         )
 
+    @staticmethod
+    def _headline_rank(check: CheckResult) -> int:
+        """How fundamental a failure is, for choosing what to lead with.
+
+        The verdict's one-line reason used to be whichever check happened to
+        fail first in the list. That buried the finding: a strategy with a
+        t-statistic of 0.28 was reported as "edge disappears at 5 bps", which
+        answers a question nobody should reach — the effect was never
+        distinguishable from luck in the first place.
+
+        Ordering is by how much of the claim the failure destroys. Look-ahead
+        invalidates the numbers outright; no significance means there was
+        nothing to invalidate; costs and decay both concede a real effect and
+        argue about what is left of it.
+        """
+        return {
+            "Look-ahead bias": 0,
+            "Cross-engine agreement": 1,
+            "Multiple testing": 2,
+            "Transaction costs": 3,
+            "Out-of-sample": 4,
+            "Parameter sensitivity": 5,
+        }.get(check.name, 99)
+
+    def leading_failure(self) -> CheckResult | None:
+        """The failure that best explains the verdict."""
+        candidates = self.failed_critical or self.failed_warning
+        return min(candidates, key=self._headline_rank) if candidates else None
+
 
 # --------------------------------------------------------------------------
 # Testability gate
@@ -181,10 +210,10 @@ def run_audit(
 
     if report.failed_critical:
         report.verdict = Verdict.FAILS
-        report.reason = report.failed_critical[0].headline
+        report.reason = report.leading_failure().headline
     elif report.failed_warning:
         report.verdict = Verdict.WEAKENED
-        report.reason = report.failed_warning[0].headline
+        report.reason = report.leading_failure().headline
     else:
         report.reason = (
             f"Survived all {sum(c.applicable for c in checks)} applicable checks."
@@ -196,7 +225,46 @@ def run_audit(
             "Not evaluated: " + ", ".join(f"{c.name} ({c.headline})" for c in skipped)
         )
 
+    coverage = universe_coverage_note(prices, spec)
+    if coverage:
+        report.notes.append(coverage)
+
     return report
+
+
+# Below this share of the paper's own universe, the thing we measured is a
+# narrower strategy than the one the paper describes, and a negative result
+# says as much about our data as about the claim.
+COVERAGE_CAVEAT_THRESHOLD = 0.5
+
+
+def universe_coverage_note(prices: pd.DataFrame, spec: StrategySpec) -> str | None:
+    """Flag a verdict reached on a fraction of the paper's universe.
+
+    The testability gate refuses a universe too small to rank into buckets at
+    all. This is the softer case that gets through it: enough names to form
+    deciles, nowhere near enough to be the cross-section the authors traded.
+
+    It matters because the shortfall is not neutral. Free data gives today's
+    surviving large caps, and the effects these papers document live
+    disproportionately in the smaller names and in the firms that later
+    failed. Measured against Ken French's full-CRSP UMD, our momentum
+    retains about half the published Sharpe — enough to turn a real effect
+    into an insignificant one. Saying so on the card keeps a FAILS from being
+    read as a stronger claim than the data can support.
+    """
+    claimed = spec.universe.n_assets.value
+    tested = prices.shape[1]
+    if not claimed or tested >= claimed * COVERAGE_CAVEAT_THRESHOLD:
+        return None
+
+    return (
+        f"Universe coverage: the paper trades {claimed} assets and we tested "
+        f"{tested} ({tested / claimed:.0%}). Free data gives today's surviving "
+        f"names, and the effects these papers document are concentrated in the "
+        f"smaller and delisted ones this list excludes. A negative result here "
+        f"is partly a statement about our data, not only about the paper."
+    )
 
 
 def render_verdict_card(report: AuditReport) -> str:

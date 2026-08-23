@@ -74,28 +74,39 @@ def _recently_missing(ticker: str) -> bool:
     return True
 
 
-def _fetch(tickers: list[str]) -> dict[str, pd.Series]:
-    """Download adjusted close for tickers, one batched request."""
+def _fetch(tickers: list[str]) -> dict[str, pd.Series] | None:
+    """Download adjusted close for tickers, one batched request.
+
+    Returns a mapping of what came back, or `None` when the request itself
+    failed. The distinction matters: an empty mapping means the provider
+    answered and has nothing for these symbols, while `None` means we never
+    got an answer. Only the former is evidence that a ticker is dead, and
+    only the former may be written to the negative cache.
+    """
     import yfinance as yf
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        raw = yf.download(
-            tickers,
-            start="1970-01-01",
-            progress=False,
-            auto_adjust=True,  # splits and dividends already applied
-            group_by="column",
-            threads=True,
-        )
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            raw = yf.download(
+                tickers,
+                start="1970-01-01",
+                progress=False,
+                auto_adjust=True,  # splits and dividends already applied
+                group_by="column",
+                threads=True,
+            )
+    except Exception as exc:  # network, rate limit, provider change
+        log.warning("download failed for %d ticker(s): %s", len(tickers), exc)
+        return None
 
     if raw is None or raw.empty:
-        return {}
+        return None
 
     out: dict[str, pd.Series] = {}
     if isinstance(raw.columns, pd.MultiIndex):
         if "Close" not in raw.columns.get_level_values(0):
-            return {}
+            return None
         close = raw["Close"]
         for t in close.columns:
             out[str(t)] = close[t].dropna()
@@ -141,10 +152,27 @@ def load_prices(
     if missing:
         log.info("downloading %d ticker(s): %s", len(missing), ", ".join(missing))
         fetched = _fetch(missing)
+
+        # A failed request is not evidence about any ticker. Marking the whole
+        # batch dead on a rate limit would silently shrink the universe for a
+        # week, and a universe that quietly loses names is exactly the kind of
+        # invisible substitution this module exists to prevent.
+        if fetched is None:
+            log.warning(
+                "no answer from the provider for %d ticker(s); leaving the "
+                "negative cache untouched so they are retried",
+                len(missing),
+            )
+            fetched = {}
+        else:
+            for t in missing:
+                s = fetched.get(t)
+                if s is None or s.empty:
+                    _miss_path(t).touch()  # remember the miss; do not ask again
+
         for t in missing:
             s = fetched.get(t)
             if s is None or s.empty:
-                _miss_path(t).touch()  # remember the miss; do not ask again
                 continue
             s.name = "close"
             s.to_frame().to_parquet(_cache_path(t))
@@ -166,7 +194,22 @@ def load_prices(
             continue
 
         window = s.loc[start:end] if (start or end) else s
-        if len(window) < MIN_USABLE_ROWS:
+
+        # A percentage return is undefined across zero. WTI settled at
+        # -$37.63 on 2020-04-20, and `pct_change` across that sign flip
+        # reports -306% one day and +127% the next: two fabricated moves
+        # larger than anything that happened, which then poison the
+        # volatility estimate and every signal built on it. Non-positive
+        # marks are dropped rather than carried, and the drop is recorded.
+        non_positive = int((window <= 0).sum())
+        if non_positive:
+            window = window.mask(window <= 0)
+            log.warning(
+                "%s: %d non-positive price(s) dropped; returns across a sign "
+                "change are undefined", t, non_positive,
+            )
+
+        if len(window.dropna()) < MIN_USABLE_ROWS:
             coverage.append(
                 Coverage(
                     t,
@@ -184,9 +227,13 @@ def load_prices(
             Coverage(
                 t,
                 ok=True,
-                rows=len(window),
+                rows=len(window.dropna()),
                 first=window.index[0].date(),
                 last=window.index[-1].date(),
+                reason=(
+                    f"{non_positive} non-positive price(s) dropped"
+                    if non_positive else ""
+                ),
             )
         )
 
