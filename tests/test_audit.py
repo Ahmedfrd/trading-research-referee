@@ -514,3 +514,27 @@ def test_genuine_decay_and_persistence_still_classify(
     assert check.applicable is True
     assert check.passed is expect_pass
     assert check.severity is expect_severity
+
+
+def test_an_applicable_out_of_sample_check_may_still_have_no_retention():
+    """The data contract every consumer of this check has to respect.
+
+    "No edge in either period" is a real finding, so it is reported as an
+    applicable, failing check — but there is no positive baseline to divide
+    by, so `retained` stays None. The Streamlit card renders a delta from that
+    field whenever the check is applicable, and briefly crashed on exactly
+    this case. Anything reading `retained` must handle None.
+    """
+    result = _Returns(_split_returns(-0.0004, -0.0005, 2000, 2000, 2010))
+    check = check_out_of_sample(None, _spec_published(2010), result)
+
+    assert check.applicable is True
+    assert check.passed is False
+    assert check.data["retained"] is None
+
+    # And the inverse: a genuine decay finding must still carry the number.
+    decayed = check_out_of_sample(
+        None, _spec_published(2010),
+        _Returns(_split_returns(0.0012, 0.0002, 2000, 2000, 2010)),
+    )
+    assert isinstance(decayed.data["retained"], float)

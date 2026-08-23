@@ -148,13 +148,23 @@ def render_checks(report) -> None:
                 st.plotly_chart(fig, width="stretch")
 
             elif c.name == "Out-of-sample" and c.applicable:
+                # `retained` is None when there was no positive in-sample
+                # Sharpe to decay from — a ratio against a losing baseline is
+                # meaningless, so the check leaves it unset. Rendering a delta
+                # from it would crash the tab.
+                retained = c.data.get("retained")
                 a, b = st.columns(2)
                 a.metric("In-sample Sharpe", f"{c.data['in_sample_sharpe']:.2f}")
                 b.metric(
                     f"After {c.data['publication_year']}",
                     f"{c.data['out_sample_sharpe']:.2f}",
-                    delta=f"{c.data['retained'] - 1:+.0%}",
+                    delta=f"{retained - 1:+.0%}" if retained is not None else None,
                 )
+                if retained is None:
+                    st.caption(
+                        "No decay figure: the strategy had no positive "
+                        "in-sample edge to decay from."
+                    )
 
             elif c.name == "Multiple testing":
                 n = c.data["n_tests"]
