@@ -22,6 +22,8 @@ from referee.ai.client import ClaudeCLIClient, LLMError, load_prompt
 from referee.ai.generate import check_code
 from referee.ai.verify import quote_fidelity, unverified
 from referee.audit.verdict import VERDICT_MEANING, Verdict, run_audit
+from referee.describe import describe_sections, describe_strategy, one_line_summary
+from referee.feasibility import Level, assess
 from referee.data.loaders import coverage_table, load_prices
 from referee.data.universes import (
     MOP_COMMODITIES,
@@ -33,6 +35,7 @@ from referee.engine.backtest import run_backtest
 from referee.papers import ALL_PAPERS
 from referee.pipeline import (
     PipelineState,
+    stage_approve_code,
     stage_confirm,
     stage_extract,
     stage_generate,
@@ -82,6 +85,30 @@ def state() -> PipelineState:
     if "pipeline" not in st.session_state:
         st.session_state.pipeline = PipelineState()
     return st.session_state.pipeline
+
+
+def preview_prices(spec: StrategySpec):
+    """Prices for the feasibility panel, if we can get them without a wait.
+
+    The reviewer sees the confirm screen before stage 4 has run, so this
+    reaches for the cached panel rather than making them click through and
+    come back. Returns None when the universe is one we cannot resolve, which
+    is itself a finding the panel reports.
+    """
+    already = state().prices
+    if already is not None:
+        return already
+    try:
+        if spec.universe.tickers:
+            prices, _ = load_prices(list(spec.universe.tickers))
+            return prices
+        if spec.universe.asset_class.value is AssetClass.US_EQUITIES:
+            return get_equity_prices()[0]
+        if spec.universe.asset_class.value is AssetClass.COMMODITY_FUTURES:
+            return get_commodity_prices()[0]
+    except Exception:
+        return None
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -188,16 +215,349 @@ def render_checks(report) -> None:
                     )
 
 
-def render_equity_curve(result) -> None:
+def render_equity_curve(result, spec: StrategySpec | None = None) -> None:
+    """Growth of 1, against what the paper said you would have earned.
+
+    The claimed line is the paper's own annual return compounded over the same
+    dates. It is not a backtest of anything — it is the advertisement, drawn on
+    the same axes as the measurement, so the size of the gap is visible rather
+    than inferred from two numbers in a table.
+    """
     curve = result.equity_curve
     fig = go.Figure()
-    fig.add_scatter(x=curve.index, y=curve.values, mode="lines",
-                    name="Strategy", line=dict(width=2))
+    fig.add_scatter(
+        x=curve.index, y=curve.values, mode="lines",
+        name="Our replication", line=dict(width=2, color="#1f4e79"),
+    )
+
+    claimed = spec.claimed if spec else None
+    if claimed and claimed.annual_return:
+        rate = claimed.annual_return.value
+        years = (curve.index - curve.index[0]).days / 365.25
+        fig.add_scatter(
+            x=curve.index, y=(1 + rate) ** years, mode="lines",
+            name=f"Paper's claim ({rate:+.1%}/yr)",
+            line=dict(width=2, dash="dash", color="#a4243b"),
+        )
+
+    fig.add_hline(y=1.0, line_color="grey", line_width=1)
     fig.update_layout(
-        height=340, margin=dict(t=10, b=10),
+        height=380, margin=dict(t=10, b=10),
         yaxis_title="growth of 1", yaxis_type="log",
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0),
     )
     st.plotly_chart(fig, width="stretch")
+
+    if claimed and claimed.annual_return:
+        net = claimed.is_net_of_costs
+        basis = (
+            "net of costs" if (net and net.value)
+            else "before costs" if net is not None
+            else "on an unstated cost basis"
+        )
+        st.caption(
+            f"The dashed line compounds the paper's claimed "
+            f"{claimed.annual_return.value:+.2%} a year, {basis}, over our test "
+            f"dates. Our line is what the same strategy actually earned on the "
+            f"data we can obtain, charged at "
+            f"{spec.execution.cost_bps.value:.0f}bps one-way."
+        )
+    else:
+        st.caption(
+            "The paper states no annual return we could extract, so there is "
+            "no claimed line to draw against."
+        )
+
+
+def render_claim_comparison(report) -> None:
+    """Claimed against measured, side by side, with the gap named."""
+    spec, result = report.spec, report.result
+    if spec is None or result is None:
+        return
+
+    stats = result.stats
+    claimed = spec.claimed
+    rows = []
+
+    if claimed.annual_return:
+        c = claimed.annual_return.value
+        m = stats["annual_return"]
+        rows.append({
+            "Measure": "Annual return",
+            "Paper claims": f"{c:+.2%}",
+            "We measured": f"{m:+.2%}",
+            "Gap": f"{m - c:+.2%}",
+            "Shortfall": f"{(m / c - 1):+.0%}" if c else "—",
+        })
+    if claimed.sharpe:
+        c = claimed.sharpe.value
+        m = stats["sharpe"]
+        rows.append({
+            "Measure": "Sharpe ratio",
+            "Paper claims": f"{c:.2f}",
+            "We measured": f"{m:.2f}",
+            "Gap": f"{m - c:+.2f}",
+            "Shortfall": f"{(m / c - 1):+.0%}" if c else "—",
+        })
+
+    if not rows:
+        st.info(
+            "**No numeric claim to compare against.** The paper states neither "
+            "an annual return nor a Sharpe ratio that we could extract, so the "
+            "audit can judge whether the strategy works but not whether it "
+            "matches what was advertised."
+        )
+        return
+
+    st.markdown("#### Claimed against measured")
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    net = claimed.is_net_of_costs
+    if net is not None and not net.value and spec.execution.cost_bps.value == 0:
+        st.caption(
+            "Like for like: the paper's figure is gross of costs and so is "
+            "ours — no transaction cost is charged in this run."
+        )
+    elif net is not None and net.value:
+        st.caption(
+            f"The paper's figure is net of its own cost assumption, and ours is "
+            f"charged at {spec.execution.cost_bps.value:.0f}bps one-way to match."
+        )
+    else:
+        st.caption(
+            "Cost basis of the paper's figure is unstated, so the two numbers "
+            "may not be on the same footing."
+        )
+
+
+LEVEL_STYLE = {
+    Level.BLOCKING: ("🛑", "This will stop the run"),
+    Level.SEVERE: ("⚠️", "This will shape the answer"),
+    Level.NOTE: ("ℹ️", "Worth knowing"),
+}
+
+
+def render_not_testable(report, s) -> None:
+    """Why *this* paper could not be tested — specifically, not generically.
+
+    A refusal is only useful if it names the thing that stopped it. The
+    verdict carries the blocking reason; the feasibility pass supplies
+    everything else that was wrong, so the reader can tell whether it is one
+    fixable problem or a paper this tool will never handle.
+    """
+    st.error(f"### Why this paper could not be tested\n\n{report.reason}")
+
+    problems = assess(report.spec, s.prices) if report.spec else []
+    blocking_ = [p for p in problems if p.level is Level.BLOCKING]
+    others = [p for p in problems if p.level is not Level.BLOCKING]
+
+    if blocking_:
+        st.markdown("#### Everything blocking this run")
+        for p in blocking_:
+            st.error(f"🛑 **{p.title}** — {p.detail}")
+
+    if others:
+        with st.expander(f"Other problems found ({len(others)})"):
+            for p in others:
+                icon, _ = LEVEL_STYLE[p.level]
+                st.markdown(f"{icon} **{p.title}** — {p.detail}")
+
+    if report.spec:
+        st.markdown("#### What we would have tested")
+        with st.container(border=True):
+            st.markdown(describe_strategy(report.spec))
+
+        if report.spec.extraction_notes:
+            with st.expander("Extractor notes"):
+                for note in report.spec.extraction_notes:
+                    st.info(note)
+
+    st.caption(
+        "This is a refusal, not a failure. The tool declines to produce a "
+        "number it cannot stand behind — a confident figure for a strategy we "
+        "could not actually run is the outcome this project exists to prevent."
+    )
+
+
+def render_report(report, s) -> None:
+    """The verdict, and everything behind it."""
+    render_verdict_banner(report)
+
+    if report.verdict is Verdict.NOT_TESTABLE:
+        render_not_testable(report, s)
+        return
+
+    if report.result:
+        stats = report.result.stats
+        cols = st.columns(4)
+        cols[0].metric("Sharpe", f"{stats['sharpe']:.2f}")
+        cols[1].metric("Annual return", f"{stats['annual_return']:+.1%}")
+        cols[2].metric("Max drawdown", f"{stats['max_drawdown']:.1%}")
+        cols[3].metric("Turnover", f"{stats['annual_turnover']:.1f}x")
+
+        st.divider()
+        render_claim_comparison(report)
+
+        st.divider()
+        st.markdown("#### Performance against the claim")
+        render_equity_curve(report.result, report.spec)
+
+    st.divider()
+    st.markdown("#### The checks")
+    render_checks(report)
+
+    for note in report.notes:
+        st.caption(note)
+
+
+def render_feasibility(spec: StrategySpec, prices) -> list:
+    """Everything that will compromise this test, before it is run."""
+    problems = assess(spec, prices)
+    if not problems:
+        st.success(
+            "No data-side problems found: we can obtain this paper's universe "
+            "at full breadth, with enough history to test it."
+        )
+        return problems
+
+    for level in (Level.BLOCKING, Level.SEVERE, Level.NOTE):
+        here = [p for p in problems if p.level is level]
+        if not here:
+            continue
+        icon, meaning = LEVEL_STYLE[level]
+        for p in here:
+            box = {Level.BLOCKING: st.error, Level.SEVERE: st.warning,
+                   Level.NOTE: st.info}[level]
+            box(f"{icon} **{p.title}**  \n*{meaning}.* {p.detail}")
+    return problems
+
+
+# -- editing the fields the paper did not state ----------------------------
+
+
+def _set_by_path(spec: StrategySpec, path: str, value) -> None:
+    """Write `value` into the Sourced at `path`, leaving its provenance intact.
+
+    Confidence is deliberately *not* promoted to EXPLICIT on an edit. The paper
+    still does not state this field; a person has simply made a better guess
+    than the extractor did. Claiming otherwise would launder a human
+    assumption into a citation, which is the exact failure this tool exists to
+    catch.
+    """
+    parts = path.split(".")
+    target = spec
+    for part in parts[:-1]:
+        target = getattr(target, part)
+    getattr(target, parts[-1]).value = value
+
+
+def _editor_for(path: str, sourced, key: str):
+    """The right widget for this field's type, with its real constraints."""
+    value = sourced.value
+
+    if isinstance(value, bool):
+        return st.checkbox("Corrected value", value=value, key=key)
+
+    if hasattr(value, "value") and hasattr(type(value), "__members__"):
+        options = list(type(value).__members__.values())
+        return st.selectbox(
+            "Corrected value", options,
+            index=options.index(value),
+            format_func=lambda e: e.value,
+            key=key,
+        )
+
+    if path.endswith("top_fraction"):
+        # (0, 0.5]: above a half the long and short legs would overlap.
+        return st.number_input(
+            "Corrected value", min_value=0.01, max_value=0.50,
+            value=float(value), step=0.01, format="%.2f", key=key,
+        )
+
+    if path.endswith("signal_lag_days"):
+        return st.number_input(
+            "Corrected value", min_value=0, max_value=21,
+            value=int(value), step=1, key=key,
+            help="0 means trading on the same bar the signal was computed from "
+                 "— not executable, and the look-ahead check will fail it.",
+        )
+
+    if isinstance(value, int):
+        return st.number_input(
+            "Corrected value", min_value=0, value=int(value), step=1, key=key
+        )
+
+    if isinstance(value, float):
+        return st.number_input(
+            "Corrected value", value=float(value), step=0.01,
+            format="%.4f", key=key,
+        )
+
+    return st.text_input("Corrected value", value=str(value), key=key)
+
+
+def render_spec_editor(spec: StrategySpec) -> None:
+    """Let a reviewer correct any field the paper did not state outright.
+
+    Every correction is recorded in the spec's own notes, so a changed
+    parameter travels with the verdict instead of living only in the session.
+    """
+    queue = spec.fields_needing_review()
+    if not queue:
+        st.success("Every field in this specification is quoted from the paper.")
+        return
+
+    st.caption(
+        "Read these before approving. Change anything the extractor got wrong "
+        "— the correction is what gets backtested, and it is recorded on the "
+        "verdict so the number can be traced back to it."
+    )
+
+    proposed: dict[str, object] = {}
+    for path, sourced in queue:
+        badge, meaning = CONFIDENCE_BADGE[sourced.confidence]
+        with st.container(border=True):
+            left, right = st.columns([1, 2])
+            left.markdown(f"{badge} **{path}**")
+            left.caption(meaning)
+            with left:
+                new = _editor_for(path, sourced, key=f"edit::{path}")
+            if new != sourced.value:
+                proposed[path] = new
+                left.caption(f"↳ changed from `{sourced.value}`")
+
+            if sourced.quote:
+                right.markdown("**The sentence this came from:**")
+                right.markdown(f"> {sourced.quote}")
+            else:
+                right.markdown(
+                    "_No supporting sentence — the paper is silent and this is "
+                    "our default._"
+                )
+
+    if proposed:
+        st.warning(
+            f"**{len(proposed)} pending correction(s).** Nothing changes until "
+            f"you apply them."
+        )
+        if st.button("Apply corrections", type="secondary"):
+            for path, value in proposed.items():
+                before = _get_by_path(spec, path).value
+                _set_by_path(spec, path, value)
+                spec.extraction_notes.append(
+                    f"Reviewer correction: {path} changed from {before!r} to "
+                    f"{value!r} before the backtest was run."
+                )
+            state().spec_confirmed = False
+            state().code_approved = False
+            st.rerun()
+
+
+def _get_by_path(spec: StrategySpec, path: str):
+    target = spec
+    for part in path.split("."):
+        target = getattr(target, part)
+    return target
 
 
 def render_spec_review(spec: StrategySpec, editable: bool) -> StrategySpec:
@@ -236,25 +596,10 @@ def render_spec_review(spec: StrategySpec, editable: bool) -> StrategySpec:
             "This probably is not a strategy paper — see the notes below."
         )
 
-    st.markdown("#### Fields the paper did not state outright")
-    st.caption("A reviewer should read these first. Everything else was quoted directly.")
-
-    for path, sourced in queue:
-        badge, meaning = CONFIDENCE_BADGE[sourced.confidence]
-        with st.container(border=True):
-            left, right = st.columns([1, 2])
-            left.markdown(f"{badge} **{path}**")
-            left.code(str(sourced.value), language=None)
-            right.caption(meaning)
-            if sourced.quote:
-                right.markdown(f"> {sourced.quote}")
-            else:
-                right.markdown("_No supporting sentence — this is our default._")
-
     if spec.extraction_notes:
-        st.markdown("#### Extractor notes")
-        for note in spec.extraction_notes:
-            st.info(note)
+        with st.expander(f"Extractor notes ({len(spec.extraction_notes)})", expanded=False):
+            for note in spec.extraction_notes:
+                st.info(note)
 
     with st.expander("Full specification (JSON)"):
         st.json(spec.model_dump(mode="json"))
@@ -269,7 +614,17 @@ def render_spec_review(spec: StrategySpec, editable: bool) -> StrategySpec:
 st.sidebar.title("⚖️ Replication Referee")
 st.sidebar.caption("Does the claimed edge survive contact with reality?")
 
-model = st.sidebar.selectbox("Model", ["sonnet", "opus", "haiku"], index=0)
+model = st.sidebar.selectbox(
+    "Model",
+    ["opus", "sonnet", "haiku"],
+    index=0,
+    help=(
+        "Opus is the default. Extraction is the step everything downstream "
+        "depends on — a misread parameter propagates into the spec, the code "
+        "and the verdict — so it runs on the strongest model unless you "
+        "deliberately trade that away for speed."
+    ),
+)
 mode = st.sidebar.radio(
     "Mode",
     ["Replication", "Robustness"],
@@ -317,7 +672,7 @@ with tabs[0]:
     payload = None
     if source == "Reference paper":
         st.info(
-            "These three have independently known answers, so they show the tool "
+            "These four have independently known answers, so they show the tool "
             "works rather than just that it runs."
         )
         choice = st.selectbox(
@@ -348,9 +703,18 @@ with tabs[0]:
 
     if payload is not None and st.button("Extract specification", type="primary"):
         try:
-            with st.spinner("Claude is reading the paper…"):
+            with st.spinner(f"{model} is reading the paper… (up to ~3 minutes)"):
                 stage_extract(state(), get_client(model), payload)
-            st.success("Extracted. Review it in tab 2 before anything is run.")
+            if state().spec_from_cache:
+                st.info(
+                    "**Reused a specification extracted from this PDF earlier** "
+                    "— the model did not re-read the paper just now. Every "
+                    "quote in it was re-checked against the document a moment "
+                    "ago, so the evidence below is current even though the "
+                    "reading is not."
+                )
+            else:
+                st.success("Extracted. Review it in tab 2 before anything is run.")
         except LLMError as exc:
             st.error(str(exc))
 
@@ -377,11 +741,54 @@ with tabs[1]:
     if s.spec is None:
         st.info("Load or extract a paper first.")
     else:
-        render_spec_review(s.spec, editable=True)
+        prices = preview_prices(s.spec)
+
+        if s.spec_from_cache:
+            st.info(
+                "This specification was reused from an earlier extraction of "
+                "the same PDF, not read just now. Its quotes were re-verified "
+                "against the document when it was loaded."
+            )
+
+        st.subheader("The strategy in full")
+        st.caption(
+            "Written out from the specification itself, so it cannot drift "
+            "from what actually gets backtested. Read it against the paper."
+        )
+        with st.container(border=True):
+            st.markdown(describe_strategy(s.spec))
+
         st.divider()
+        st.subheader("What will compromise this test")
+        st.caption(
+            "Not only whether the paper was read correctly — also whether we "
+            "can honestly test it with the data available."
+        )
+        problems = render_feasibility(s.spec, prices)
+
+        st.divider()
+        st.subheader("How much of this came from the paper")
+        render_spec_review(s.spec, editable=True)
+
+        st.divider()
+        st.subheader("Correct anything the extractor got wrong")
+        render_spec_editor(s.spec)
+
+        st.divider()
+        blockers = [p for p in problems if p.level is Level.BLOCKING]
+        if blockers:
+            st.error(
+                f"**{len(blockers)} blocking problem(s).** You may still "
+                f"confirm, but the audit will refuse to produce a number and "
+                f"will tell you which of these stopped it."
+            )
         if s.spec_confirmed:
-            st.success("Confirmed — code generation unlocked.")
-        if st.button("I have reviewed this specification", type="primary"):
+            st.success("Confirmed — code generation unlocked in tab 3.")
+        label = (
+            "Re-confirm this specification" if s.spec_confirmed
+            else "I have reviewed this specification"
+        )
+        if st.button(label, type="primary"):
             stage_confirm(s)
             st.rerun()
 
@@ -399,27 +806,87 @@ with tabs[2]:
     if not s.spec_confirmed:
         st.warning("Confirm the specification in tab 2 first.")
     else:
-        if st.button("Generate and run", type="primary"):
-            with st.spinner("Writing the signal function…"):
+        if st.button(
+            "Regenerate code" if s.code else "Generate code", type="primary"
+        ):
+            with st.spinner(f"{model} is writing the signal function…"):
                 stage_generate(s, get_client(model))
-            if s.code:
-                from referee.pipeline import stage_load_data
-
-                with st.spinner("Loading prices and running in the sandbox…"):
-                    stage_load_data(s)
-                    stage_run_sandboxed(s)
             st.rerun()
 
         if s.code:
-            st.code(s.code, language="python")
-
             problems = check_code(s.code)
+
+            st.markdown("#### What this code is supposed to implement")
+            st.caption(
+                "The specification you approved, restated. Check the code "
+                "against this, not against your memory of the paper."
+            )
+            spec_side, code_side = st.columns([1, 1])
+
+            with spec_side:
+                for section in describe_sections(s.spec):
+                    if section.heading.startswith(("2.", "3.", "4.", "5.")):
+                        with st.container(border=True):
+                            st.markdown(f"**{section.heading}**")
+                            st.markdown(section.body)
+
+            with code_side:
+                st.code(s.code, language="python")
+
+            st.divider()
+            st.markdown("#### Automated checks")
             if problems:
-                st.error("Static check failed:\n" + "\n".join(f"- {p}" for p in problems))
+                st.error(
+                    "**Static check failed.** This code will not be allowed to "
+                    "run:\n" + "\n".join(f"- {p}" for p in problems)
+                )
             else:
                 st.success(
-                    "Static check passed — no look-ahead patterns, no imports "
-                    "outside pandas and numpy, no file or network access."
+                    "**Static check passed** — no look-ahead patterns, no "
+                    "imports outside pandas and numpy, no file or network "
+                    "access."
+                )
+                st.caption(
+                    "This proves the code is *safe* and *causal*. It does not "
+                    "prove it implements the right strategy — only you can say "
+                    "that, which is why the next step exists."
+                )
+
+            st.divider()
+            st.markdown("#### Your approval")
+            if s.code_approved:
+                st.success(
+                    "Approved. This code is what runs for the cross-engine "
+                    "check in the audit."
+                )
+            else:
+                st.warning(
+                    "**Not yet approved.** The specification gate catches a "
+                    "misread paper. This gate catches a misread specification: "
+                    "code that is safe, runs clean, and computes the wrong "
+                    "thing. Nothing is executed against real prices until you "
+                    "have read it."
+                )
+
+            can_approve = not problems
+            if st.button(
+                "This code implements the specification — approve and run",
+                type="primary",
+                disabled=not can_approve or s.code_approved,
+            ):
+                from referee.pipeline import stage_load_data
+
+                stage_approve_code(s)
+                with st.spinner("Loading prices and running in the sandbox…"):
+                    if s.prices is None:
+                        stage_load_data(s)
+                    stage_run_sandboxed(s)
+                st.rerun()
+
+            if not can_approve:
+                st.caption(
+                    "Approval is disabled while the static check is failing. "
+                    "Regenerate the code."
                 )
 
             if s.sandbox:
@@ -443,24 +910,88 @@ with tabs[3]:
     if s.spec is None:
         st.info("Load a paper first.")
     else:
-        if s.prices is None:
-            from referee.pipeline import stage_load_data
+        if s.prices is None and s.report is None:
+            from referee.pipeline import stage_audit, stage_load_data
 
             if st.button("Load data and audit", type="primary"):
                 with st.spinner("Loading prices…"):
                     stage_load_data(s)
+                    # If the universe could not be resolved, prices stay None.
+                    # Run the audit anyway: it is the thing that knows how to
+                    # refuse, and a refusal with a reason is the answer here.
+                    if s.prices is None:
+                        stage_audit(s)
                 st.rerun()
-        else:
+        elif s.prices is not None:
             if mode == "Replication":
                 st.caption(
                     "Every parameter locked to the paper's own values. One question: "
                     "does the claim hold?"
                 )
-                if st.button("Run the audit", type="primary"):
+
+                # A verdict is a statement about a strategy, and the only
+                # evidence that we implemented the right strategy is a second
+                # implementation someone has read. Reaching the verdict
+                # without that step would leave the cross-engine check
+                # permanently N/A and the claim resting on one unreviewed
+                # reading of the spec.
+                skip_cross_engine = False
+                if not s.code:
+                    st.warning(
+                        "**No code generated yet.** Generate it in tab 3 and "
+                        "read it before the audit runs. The verdict rests on "
+                        "the strategy being implemented correctly, and the "
+                        "cross-engine check is what tests that."
+                    )
+                elif not s.code_approved:
+                    st.warning(
+                        "**The generated code has not been approved.** Read it "
+                        "in tab 3 and approve it there. Until then the audit "
+                        "would be judging a strategy nobody has confirmed we "
+                        "implemented correctly."
+                    )
+
+                if not s.code_approved:
+                    # The gate is the right default, but it makes every verdict
+                    # depend on a model call. When the model is slow or
+                    # unreachable, the choice is between no answer at all and
+                    # an answer with one of six checks missing — and the second
+                    # is more useful, provided the omission is stated rather
+                    # than hidden.
+                    skip_cross_engine = st.checkbox(
+                        "Run without the cross-engine check",
+                        help=(
+                            "Five checks instead of six. The engine still "
+                            "tests look-ahead, costs, out-of-sample behaviour, "
+                            "parameter sensitivity and significance — but "
+                            "nothing verifies that our implementation of the "
+                            "spec agrees with a second, independent one. The "
+                            "verdict will say so."
+                        ),
+                    )
+                    if skip_cross_engine:
+                        st.info(
+                            "The cross-engine check will be skipped and marked "
+                            "as such on the verdict."
+                        )
+
+                if st.button(
+                    "Run the audit",
+                    type="primary",
+                    disabled=not (s.code_approved or skip_cross_engine),
+                ):
                     from referee.pipeline import stage_audit
 
-                    with st.spinner("Running six checks…"):
+                    with st.spinner("Running the checks…"):
                         stage_audit(s)
+                        if skip_cross_engine and s.report:
+                            s.report.notes.append(
+                                "Cross-engine agreement was skipped at the "
+                                "operator's request: no second implementation "
+                                "was generated or approved, so nothing checked "
+                                "that our reading of the specification is the "
+                                "only reasonable one. Five checks ran, not six."
+                            )
                     st.rerun()
             else:
                 st.caption(
@@ -509,21 +1040,11 @@ with tabs[3]:
 
             if s.report:
                 st.divider()
-                render_verdict_banner(s.report)
+                render_report(s.report, s)
 
-                if s.report.result:
-                    st_ = s.report.result.stats
-                    cols = st.columns(4)
-                    cols[0].metric("Sharpe", f"{st_['sharpe']:.2f}")
-                    cols[1].metric("Annual return", f"{st_['annual_return']:+.1%}")
-                    cols[2].metric("Max drawdown", f"{st_['max_drawdown']:.1%}")
-                    cols[3].metric("Turnover", f"{st_['annual_turnover']:.1f}x")
-                    render_equity_curve(s.report.result)
+        if s.prices is None and s.report is not None:
+            render_report(s.report, s)
 
-                render_checks(s.report)
-
-                for note in s.report.notes:
-                    st.caption(note)
 
 # -- 5. Data ---------------------------------------------------------------
 

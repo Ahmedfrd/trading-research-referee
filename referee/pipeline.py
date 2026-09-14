@@ -42,10 +42,25 @@ class PipelineState:
     spec: StrategySpec | None = None
     spec_confirmed: bool = False
 
+    spec_from_cache: bool = False
+    """This spec was reused from a previous extraction, not read just now.
+
+    Surfaced so the UI never implies the model has just read the paper when
+    it has not. The quotes are re-verified against the document either way.
+    """
+
     quote_checks: list[QuoteCheck] = field(default_factory=list)
     """Whether each claimed quote actually appears in the paper."""
 
     code: str = ""
+    code_approved: bool = False
+    """A human has read the generated code and agreed it implements the spec.
+
+    The spec gate catches a misread paper. This one catches a misread spec:
+    code that is safe, runs clean, and computes the wrong thing. Nothing is
+    executed against real prices until a person has said the code matches.
+    """
+
     sandbox: SandboxResult | None = None
 
     prices: pd.DataFrame | None = None
@@ -63,11 +78,34 @@ class PipelineState:
 # --------------------------------------------------------------------------
 
 
+SPEC_CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "cache"
+
+
+def cached_spec_path(pdf: Path) -> Path:
+    """Where a previously extracted spec for this PDF is kept."""
+    return SPEC_CACHE_DIR / f"spec_{pdf.stem}.json"
+
+
 def stage_extract(
-    state: PipelineState, client: LLMClient, source: str | Path
+    state: PipelineState,
+    client: LLMClient,
+    source: str | Path,
+    *,
+    use_cache: bool = True,
 ) -> PipelineState:
-    """Read the paper into a spec. Output is a draft for a human, not a result."""
+    """Read the paper into a spec. Output is a draft for a human, not a result.
+
+    Extraction takes about three minutes on a full paper, so a spec already
+    produced for the same PDF is reused rather than re-bought. Two things
+    keep that honest: the reuse is recorded on the state so the UI can say so
+    rather than implying the model just read the paper, and quote
+    verification still runs against the actual document — a cached spec is
+    re-checked against the text every time it is loaded, so a stale or edited
+    file cannot pass unnoticed.
+    """
     path = Path(source)
+    state.spec_from_cache = False
+
     if path.exists() and path.suffix.lower() == ".pdf":
         state.paper_text = read_pdf(path)
         state.source_name = path.name
@@ -75,7 +113,26 @@ def stage_extract(
         state.paper_text = str(source)
         state.source_name = "pasted text"
 
-    state.spec, _ = extract_spec(client, state.paper_text)
+    cache_file = cached_spec_path(path) if path.exists() else None
+
+    if use_cache and cache_file is not None and cache_file.exists():
+        try:
+            state.spec = StrategySpec.model_validate_json(cache_file.read_text())
+            state.spec_from_cache = True
+            log.info("reusing cached spec for %s", path.name)
+        except Exception as exc:  # corrupt or outdated cache: extract afresh
+            log.warning("cached spec unusable (%s); re-extracting", exc)
+            state.spec = None
+
+    if state.spec is None or not state.spec_from_cache:
+        state.spec, _ = extract_spec(client, state.paper_text)
+        if cache_file is not None:
+            try:
+                SPEC_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache_file.write_text(state.spec.model_dump_json(indent=2))
+            except OSError as exc:
+                log.warning("could not cache the extracted spec: %s", exc)
+
     state.spec_confirmed = False
 
     # A quote that is not in the paper is a fabricated citation, whether an AI
@@ -124,8 +181,20 @@ def stage_generate(state: PipelineState, client: LLMClient) -> PipelineState:
         )
     try:
         state.code, _ = generate_code(client, state.spec)
+        # New code has not been read by anyone yet, whatever was approved
+        # before. Carrying the flag over would let a regenerated function run
+        # on the strength of a review of the one it replaced.
+        state.code_approved = False
     except (UnsafeCode, LLMError) as exc:
         state.errors.append(f"code generation failed: {exc}")
+    return state
+
+
+def stage_approve_code(state: PipelineState) -> PipelineState:
+    """Record that a human has read the generated code and accepted it."""
+    if not state.code:
+        raise ValueError("there is no code to approve")
+    state.code_approved = True
     return state
 
 
@@ -170,9 +239,13 @@ def stage_load_data(state: PipelineState) -> PipelineState:
 
 
 def stage_run_sandboxed(state: PipelineState, timeout: int = 60) -> PipelineState:
-    """Execute the generated code in isolation."""
+    """Execute the generated code in isolation, once a human has approved it."""
     if not state.code or state.prices is None or state.prices.empty:
         return state
+    if not state.code_approved:
+        raise ValueError(
+            "the generated code must be approved by a human before it is run"
+        )
     state.sandbox = run_generated_signal(state.code, state.prices, timeout=timeout)
     if not state.sandbox.ok:
         state.errors.append(f"sandboxed run failed: {state.sandbox.error}")
@@ -228,10 +301,10 @@ def run_full_pipeline(
     *,
     auto_confirm: bool = False,
 ) -> PipelineState:
-    """Run every stage. `auto_confirm` skips the human gate — tests only.
+    """Run every stage. `auto_confirm` skips both human gates — tests only.
 
-    In the product the gate is real; here it exists so the regression suite can
-    exercise the whole path without a person in the loop.
+    In the product the gates are real; here they exist so the regression suite
+    can exercise the whole path without a person in the loop.
     """
     state = PipelineState()
     stage_extract(state, client, source)
@@ -245,6 +318,8 @@ def run_full_pipeline(
     stage_confirm(state)
     stage_load_data(state)
     stage_generate(state, client)
+    if state.code:
+        stage_approve_code(state)
     stage_run_sandboxed(state)
     stage_audit(state)
     return state
