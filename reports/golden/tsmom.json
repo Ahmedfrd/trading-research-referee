@@ -1,0 +1,104 @@
+{
+  "paper": "Moskowitz, Ooi & Pedersen (2012), 'Time series momentum', JFE, PDF p.10: EWMA vol with center of mass delta/(1-delta)=60 days, factor 261; PDF p.14: strategy return sign(r_{t-12,t}) * target/sigma_{t-1}; target 40%.",
+  "level": "L2 (own build on Yahoo continuous futures vs L1 AQR factor)",
+  "provenance": {
+    "ours": [
+      {
+        "source": "Yahoo Finance via yfinance (cached Aug\u2013Sep 2026)",
+        "url": "https://finance.yahoo.com",
+        "retrieved_at": "2026-08/2026-09",
+        "vintage": null,
+        "sha256": null,
+        "adjustments": "split- and dividend-adjusted (auto_adjust=True)",
+        "license": "Yahoo Finance terms of use; personal/research use, not redistributable",
+        "known_biases": [
+          "survivorship: today's listings only; delisted firms absent",
+          "unofficial API: no SLA, silent errors possible",
+          "adjusted history is revised between downloads"
+        ]
+      }
+    ],
+    "aqr": {
+      "source": "AQR Time Series Momentum factors (Moskowitz, Ooi, Pedersen)",
+      "url": "https://www.aqr.com/Insights/Datasets/Time-Series-Momentum-Factors-Monthly",
+      "retrieved_at": "2026-08-18T13:20:55+00:00",
+      "vintage": "aqr_tsmom_monthly",
+      "sha256": "33470930e2269c0d97be4732ec2d9c27ddbc69ac8133b059a263e27400263eeb",
+      "adjustments": "returns as published by AQR (decimal)",
+      "license": "Terms of use are in the spreadsheet's own tab; credit AQR Capital Management",
+      "known_biases": []
+    },
+    "universe": "commodity_futures_yahoo"
+  },
+  "disclosures": [
+    "Survivorship bias: the cache holds today's listings only; delisted and bankrupt firms are absent, so equity backtests are biased upward.",
+    "Continuous front-month series are not delisting-prone, but the contract set is today's.",
+    "Coverage: 21 commodity instruments obtained vs 24 commodities (58 instruments total) in the paper.",
+    "Yahoo continuous front-month futures are NOT roll-adjusted: roll gaps enter as spurious returns, adding noise and bias.",
+    "Breadth: far fewer instruments than the paper, so portfolio vol and diversification differ."
+  ],
+  "settings": {
+    "lookback": 12,
+    "vol_target": 0.4,
+    "vol": "EWMA com=60, ann=261, month-end sample",
+    "cost_bps": 0,
+    "overlap": [
+      "1998-11-30",
+      "2026-05-31"
+    ],
+    "n_months": 331
+  },
+  "stats": {
+    "ours": {
+      "mean": 0.00402,
+      "t": 1.44629,
+      "t_nw": 1.44824,
+      "ann_vol": 0.17518,
+      "sharpe": 0.27538
+    },
+    "aqr_cm": {
+      "mean": 0.00574,
+      "t": 2.30969,
+      "t_nw": 2.38301,
+      "ann_vol": 0.15654,
+      "sharpe": 0.43978
+    }
+  },
+  "table": [
+    {
+      "metric": "Monthly mean vs AQR TSMOM^CM",
+      "paper": 0.00574,
+      "paper_t": 2.30969,
+      "ours": 0.00402,
+      "ours_t": 1.44629,
+      "diff": -0.00172,
+      "status": "fail",
+      "note": "Reference = AQR commodity TSMOM (24 commodities, roll-adjusted, own vol scaling)."
+    },
+    {
+      "metric": "correlation",
+      "paper": null,
+      "paper_t": null,
+      "ours": 0.62329,
+      "ours_t": null,
+      "diff": null,
+      "status": "n/a",
+      "note": "ours vs AQR TSMOM^CM"
+    },
+    {
+      "metric": "annualized Sharpe",
+      "paper": 0.43978,
+      "paper_t": null,
+      "ours": 0.27538,
+      "ours_t": null,
+      "diff": -0.16439,
+      "status": "n/a",
+      "note": "AQR column = TSMOM^CM Sharpe over same months"
+    }
+  ],
+  "notes": [
+    "Parameters not tuned.",
+    "The paper's Fig. 2 gives per-instrument Sharpe ratios graphically; no commodity-only or diversified Sharpe number was found in text, so no paper-reported figure is compared.",
+    "Reference is AQR's replication data, not the paper's own CSV."
+  ]
+}

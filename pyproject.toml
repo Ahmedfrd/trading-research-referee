@@ -1,0 +1,40 @@
+[project]
+name = "replicator"
+version = "0.2.0"
+description = "Honest local replication of trading-research papers"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy==2.5.2",
+    "pandas==3.0.5",
+    "pydantic==2.13.4",
+    "scipy==1.18.0",
+    "statsmodels==0.15.0",
+    "scikit-learn==1.9.1",
+    "empyrical-reloaded==0.7.0",
+    "streamlit==1.61.1",
+    "pypdf==6.16.1",
+    "pyarrow==24.0.0",
+    "plotly==6.9.0",
+    "openpyxl==3.1.5",
+    "PyYAML==6.0.3",
+    "yfinance==1.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.14.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+src = ["replicator", "tests"]
+
+[tool.ruff.lint]
+# Syntax and undefined-name checks only. The existing modules are not restyled.
+select = ["E9", "F"]

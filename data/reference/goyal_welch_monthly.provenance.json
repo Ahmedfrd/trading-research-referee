@@ -1,0 +1,10 @@
+{
+ "url": "https://github.com/fundops-notes/amit-goyal-asset-pricing-library/raw/main/00_数据集/WelchGoyal_Updated_Data_to2025.xlsx (sheet Monthly)",
+ "original_source": "Amit Goyal, https://sites.google.com/view/agoyal145 (Welch & Goyal 2008 predictors, updated); site itself serves Google Drive links not fetched",
+ "retrieved_at": "2026-10-19T08:18:57.116507+00:00",
+ "sha256_xlsx": "8d210b779442a5a9206702060aac67c1de4283186c0f167ebdb4488d149be872",
+ "sha256_csv": "f887a07da3f1ce5df205b55706713a6a7b094d1d54257bcae12b11030c4f4311",
+ "vintage_end": "202512",
+ "sample_rows": 1860,
+ "license_note": "Free for academic use per Goyal/Welch site; redistributed via third-party GitHub mirror (not the author); vintage may differ from the JF paper data (to 2020) in revised values."
+}

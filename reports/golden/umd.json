@@ -1,0 +1,107 @@
+{
+  "paper": "Ken French UMD (Carhart 1997 momentum factor) as the reference for an equal-weight UMD-like factor",
+  "level": "L2 (own construction on cached survivor universe vs L1 third-party factor)",
+  "provenance": {
+    "ours": [
+      {
+        "source": "Yahoo Finance via yfinance (cached Aug\u2013Sep 2026)",
+        "url": "https://finance.yahoo.com",
+        "retrieved_at": "2026-08/2026-09",
+        "vintage": null,
+        "sha256": null,
+        "adjustments": "split- and dividend-adjusted (auto_adjust=True)",
+        "license": "Yahoo Finance terms of use; personal/research use, not redistributable",
+        "known_biases": [
+          "survivorship: today's listings only; delisted firms absent",
+          "unofficial API: no SLA, silent errors possible",
+          "adjusted history is revised between downloads"
+        ]
+      }
+    ],
+    "kf": {
+      "source": "Kenneth French Data Library: Momentum Factor (Mom/UMD, monthly)",
+      "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html",
+      "retrieved_at": "2026-10-19T08:12:33+00:00",
+      "vintage": "kf_umd_monthly",
+      "sha256": "c06d1c2e9a5e4f6985879722f23c6bb585f46b34eaf3fcb681d4de887e353f3e",
+      "adjustments": "percent converted to decimal; -99.99/-999 -> NaN",
+      "license": "Free for academic/research use; cite Kenneth R. French Data Library",
+      "known_biases": []
+    },
+    "universe": "us_equities_cached"
+  },
+  "disclosures": [
+    "Survivorship bias: the cache holds today's listings only; delisted and bankrupt firms are absent, so equity backtests are biased upward.",
+    "Survivors only: tickers are today's listings; delisted firms are absent, biasing returns upward.",
+    "Breadth: months restricted to >= 100 stocks with a return; 511 tickers in universe.",
+    "Equal-weight, top/bottom 30% on prior 2-12 return, no size split, no value weights: KF UMD is the average of small/big (value-weighted) winners minus losers."
+  ],
+  "settings": {
+    "J": 11,
+    "skip": 1,
+    "K": 1,
+    "top_fraction": 0.3,
+    "weighting": "equal",
+    "min_breadth": 100,
+    "cost_bps": 0
+  },
+  "coverage": {
+    "n_months": 558,
+    "start": "1980-02-29",
+    "end": "2026-07-31",
+    "breadth_min": 101.0,
+    "breadth_median": 429.0
+  },
+  "stats": {
+    "ours": {
+      "mean": 0.00197,
+      "t": 1.03465,
+      "t_nw": 1.04956,
+      "ann_vol": 0.15553,
+      "sharpe": 0.15173
+    },
+    "kf": {
+      "mean": 0.00509,
+      "t": 2.70457,
+      "t_nw": 2.67016,
+      "ann_vol": 0.15406,
+      "sharpe": 0.39662
+    }
+  },
+  "table": [
+    {
+      "metric": "UMD monthly mean (ours vs KF)",
+      "paper": 0.00509,
+      "paper_t": 2.70457,
+      "ours": 0.00197,
+      "ours_t": 1.03465,
+      "diff": -0.00313,
+      "status": "fail",
+      "note": "Paper column = Ken French UMD over the same months; paper_t is plain t."
+    },
+    {
+      "metric": "correlation",
+      "paper": null,
+      "paper_t": null,
+      "ours": 0.89405,
+      "ours_t": null,
+      "diff": null,
+      "status": "n/a",
+      "note": "ours vs KF UMD"
+    },
+    {
+      "metric": "annualized Sharpe",
+      "paper": 0.39662,
+      "paper_t": null,
+      "ours": 0.15173,
+      "ours_t": null,
+      "diff": -0.24489,
+      "status": "n/a",
+      "note": "raw (not excess) returns"
+    }
+  ],
+  "notes": [
+    "Parameters not tuned.",
+    "Differences stem from weighting, universe survivorship, and no size breakpoints."
+  ]
+}

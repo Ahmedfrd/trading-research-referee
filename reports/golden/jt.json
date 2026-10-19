@@ -1,0 +1,424 @@
+{
+  "paper": "Jegadeesh & Titman (1993), Table I 'Returns of Relative Strength Portfolios', PDF p.7 (printed p.70)",
+  "level": "L1 (Tier 1, third-party CRSP-built deciles) and L2 (Tier 2, our cached survivor universe)",
+  "provenance": {
+    "tier1": {
+      "source": "Kenneth French Data Library: 10 Portfolios Formed on Prior 12-2 Return (equal-weighted, monthly)",
+      "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html",
+      "retrieved_at": "2026-10-19T08:12:30+00:00",
+      "vintage": "kf_10_momentum_monthly",
+      "sha256": "dce836c412a4ce0a9c4bdb2d4f3a613672b6ffd10e434132e2a21bf9bb18f001",
+      "adjustments": "percent converted to decimal; -99.99/-999 -> NaN; D10 = highest prior return",
+      "license": "Free for academic/research use; cite Kenneth R. French Data Library",
+      "known_biases": []
+    },
+    "tier2": [
+      {
+        "source": "Yahoo Finance via yfinance (cached Aug\u2013Sep 2026)",
+        "url": "https://finance.yahoo.com",
+        "retrieved_at": "2026-08/2026-09",
+        "vintage": null,
+        "sha256": null,
+        "adjustments": "split- and dividend-adjusted (auto_adjust=True)",
+        "license": "Yahoo Finance terms of use; personal/research use, not redistributable",
+        "known_biases": [
+          "survivorship: today's listings only; delisted firms absent",
+          "unofficial API: no SLA, silent errors possible",
+          "adjusted history is revised between downloads"
+        ]
+      }
+    ],
+    "universe": "us_equities_cached"
+  },
+  "disclosures": [
+    "Survivorship bias: the cache holds today's listings only; delisted and bankrupt firms are absent, so equity backtests are biased upward.",
+    "Survivors only: tickers are today's listings; delisted firms are absent, biasing returns upward.",
+    "Breadth: us_equities_cached has 511 tickers, far fewer than J&T's full CRSP cross-section; top/bottom 10% legs are small.",
+    "Coverage: cached equities may not span 1965-89 fully; see tier2 n_months and breadth."
+  ],
+  "settings": {
+    "tier1": {
+      "window": [
+        "1965-01-01",
+        "1989-12-31"
+      ],
+      "deciles": "KF EW prior 2-12, monthly holding"
+    },
+    "tier2": {
+      "skip": 0,
+      "top_fraction": 0.1,
+      "J_K": "all 16 Panel A cells",
+      "windows": [
+        "1965-1989",
+        "full_cached"
+      ]
+    }
+  },
+  "tier2_coverage": {
+    "1965-1989": {
+      "n_months": 226,
+      "breadth_formation": {
+        "min": 0.0,
+        "median": 99.0
+      },
+      "n_assets_with_data": 271
+    },
+    "full_cached": {
+      "n_months": 665,
+      "breadth_formation": {
+        "min": 0.0,
+        "median": 373.5
+      },
+      "n_assets_with_data": 511
+    }
+  },
+  "data_bias_attribution": {
+    "n_months": 227,
+    "corr": 0.69082,
+    "mean_ours": 0.01068,
+    "mean_kf": 0.01385,
+    "mean_gap": -0.00317,
+    "window": [
+      "1971-02-28",
+      "1989-12-31"
+    ]
+  },
+  "table": [
+    {
+      "metric": "Tier1 KF EW D10-D1 1965-89 (prior 2-12, K=1) vs Panel B J=12,K=3",
+      "paper": 0.0149,
+      "paper_t": 4.28,
+      "ours": 0.01331,
+      "ours_t": 4.79478,
+      "diff": -0.00159,
+      "status": "pass",
+      "note": "Construction differs: KF = 2-12 skip-month, K=1, NYSE/AMEX/Nasdaq-style CRSP deciles; paper = J=12/K=3 overlapping, 1-week skip, NYSE/AMEX. L1 comparison is of the closest cell, not identical."
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=3,K=3",
+      "paper": 0.0032,
+      "paper_t": 1.1,
+      "ours": -0.00188,
+      "ours_t": -0.51541,
+      "diff": -0.00508,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=3,K=6",
+      "paper": 0.0058,
+      "paper_t": 2.29,
+      "ours": -0.00064,
+      "ours_t": -0.23901,
+      "diff": -0.00644,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=3,K=9",
+      "paper": 0.0061,
+      "paper_t": 2.69,
+      "ours": 0.00225,
+      "ours_t": 0.89506,
+      "diff": -0.00385,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=3,K=12",
+      "paper": 0.0069,
+      "paper_t": 3.53,
+      "ours": 0.00456,
+      "ours_t": 1.98482,
+      "diff": -0.00234,
+      "status": "pass",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=6,K=3",
+      "paper": 0.0084,
+      "paper_t": 2.44,
+      "ours": -0.00171,
+      "ours_t": -0.44202,
+      "diff": -0.01011,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=6,K=6",
+      "paper": 0.0095,
+      "paper_t": 3.07,
+      "ours": 0.00135,
+      "ours_t": 0.37913,
+      "diff": -0.00815,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=6,K=9",
+      "paper": 0.0102,
+      "paper_t": 3.76,
+      "ours": 0.00582,
+      "ours_t": 1.77406,
+      "diff": -0.00438,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=6,K=12",
+      "paper": 0.0086,
+      "paper_t": 3.36,
+      "ours": 0.00477,
+      "ours_t": 1.55324,
+      "diff": -0.00383,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=9,K=3",
+      "paper": 0.0109,
+      "paper_t": 3.03,
+      "ours": 0.00516,
+      "ours_t": 1.18498,
+      "diff": -0.00574,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=9,K=6",
+      "paper": 0.0121,
+      "paper_t": 3.78,
+      "ours": 0.00837,
+      "ours_t": 2.10451,
+      "diff": -0.00373,
+      "status": "pass",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=9,K=9",
+      "paper": 0.0105,
+      "paper_t": 3.47,
+      "ours": 0.00747,
+      "ours_t": 1.95326,
+      "diff": -0.00303,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=9,K=12",
+      "paper": 0.0082,
+      "paper_t": 2.89,
+      "ours": 0.0048,
+      "ours_t": 1.34611,
+      "diff": -0.0034,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=12,K=3",
+      "paper": 0.0131,
+      "paper_t": 3.74,
+      "ours": 0.00788,
+      "ours_t": 1.77688,
+      "diff": -0.00522,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=12,K=6",
+      "paper": 0.0114,
+      "paper_t": 3.4,
+      "ours": 0.00669,
+      "ours_t": 1.58787,
+      "diff": -0.00471,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=12,K=9",
+      "paper": 0.0093,
+      "paper_t": 2.95,
+      "ours": 0.00553,
+      "ours_t": 1.40301,
+      "diff": -0.00377,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [1965-1989] PanelA J=12,K=12",
+      "paper": 0.0068,
+      "paper_t": 2.25,
+      "ours": 0.00326,
+      "ours_t": 0.85637,
+      "diff": -0.00354,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=3,K=3",
+      "paper": 0.0032,
+      "paper_t": 1.1,
+      "ours": -0.00055,
+      "ours_t": -0.2462,
+      "diff": -0.00375,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=3,K=6",
+      "paper": 0.0058,
+      "paper_t": 2.29,
+      "ours": -8e-05,
+      "ours_t": -0.0455,
+      "diff": -0.00588,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=3,K=9",
+      "paper": 0.0061,
+      "paper_t": 2.69,
+      "ours": 0.0012,
+      "ours_t": 0.7138,
+      "diff": -0.0049,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=3,K=12",
+      "paper": 0.0069,
+      "paper_t": 3.53,
+      "ours": 0.00208,
+      "ours_t": 1.40681,
+      "diff": -0.00482,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=6,K=3",
+      "paper": 0.0084,
+      "paper_t": 2.44,
+      "ours": -9e-05,
+      "ours_t": -0.036,
+      "diff": -0.00849,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=6,K=6",
+      "paper": 0.0095,
+      "paper_t": 3.07,
+      "ours": 0.00124,
+      "ours_t": 0.52681,
+      "diff": -0.00826,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=6,K=9",
+      "paper": 0.0102,
+      "paper_t": 3.76,
+      "ours": 0.00298,
+      "ours_t": 1.40021,
+      "diff": -0.00722,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=6,K=12",
+      "paper": 0.0086,
+      "paper_t": 3.36,
+      "ours": 0.0019,
+      "ours_t": 0.97272,
+      "diff": -0.0067,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=9,K=3",
+      "paper": 0.0109,
+      "paper_t": 3.03,
+      "ours": 0.00256,
+      "ours_t": 0.89309,
+      "diff": -0.00834,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=9,K=6",
+      "paper": 0.0121,
+      "paper_t": 3.78,
+      "ours": 0.00391,
+      "ours_t": 1.50134,
+      "diff": -0.00819,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=9,K=9",
+      "paper": 0.0105,
+      "paper_t": 3.47,
+      "ours": 0.00305,
+      "ours_t": 1.25183,
+      "diff": -0.00745,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=9,K=12",
+      "paper": 0.0082,
+      "paper_t": 2.89,
+      "ours": 0.00109,
+      "ours_t": 0.48472,
+      "diff": -0.00711,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=12,K=3",
+      "paper": 0.0131,
+      "paper_t": 3.74,
+      "ours": 0.00313,
+      "ours_t": 1.08727,
+      "diff": -0.00997,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=12,K=6",
+      "paper": 0.0114,
+      "paper_t": 3.4,
+      "ours": 0.00233,
+      "ours_t": 0.86421,
+      "diff": -0.00907,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=12,K=9",
+      "paper": 0.0093,
+      "paper_t": 2.95,
+      "ours": 0.00122,
+      "ours_t": 0.48238,
+      "diff": -0.00808,
+      "status": "fail",
+      "note": ""
+    },
+    {
+      "metric": "Tier2 [full_cached] PanelA J=12,K=12",
+      "paper": 0.0068,
+      "paper_t": 2.25,
+      "ours": -0.00021,
+      "ours_t": -0.09006,
+      "diff": -0.00701,
+      "status": "fail",
+      "note": ""
+    }
+  ],
+  "notes": [
+    "Parameters not tuned to match the paper.",
+    "Paper t-stats are as printed; ours t is plain mean/SE.",
+    "Tier1 NW t = 5.53, plain t = 4.79, n = 300.",
+    "Panel B (1-week skip) cannot be built on monthly data; Tier 2 compares to Panel A only."
+  ]
+}

@@ -1,370 +1,156 @@
-# The Replication Referee
+# Replicator
 
-Upload a published trading-strategy paper. Get back one answer:
+Replicator reads a trading-strategy paper and walks you from the PDF to a finished run. It stores the paper, extracts a cited specification, asks you to approve every assumption, fills a code template from that specification, and runs the strategy beside a benchmark. The Results tab puts the paper's reported numbers next to the numbers from this run, with the six checks, gap reasons, disclosures, and a manifest.
 
-> **Does the claimed edge survive contact with reality?**
+## Run
 
-Most published trading research does not work as advertised. Hou, Xue & Zhang
-tested 447 published anomalies and found **64% statistically insignificant**
-at the 5% level, and **85%** failing at t > 3. McLean & Pontiff tracked 97
-return predictors and found returns **26% lower** on fresh data and **58%
-lower** after publication. Verifying one paper by hand takes a skilled analyst
-one to two weeks.
-
-## The pipeline
-
-```
-   PDF
-    │
-    ▼
-1. EXTRACT      Claude reads the paper into a Strategy Spec.
-                Every field carries the sentence it came from,
-                and every sentence is checked against the text.
-    │
-    ▼
-2. CONFIRM      A human reads the whole strategy in English,
-                sees what will compromise the test, corrects
-                anything wrong.  ── HARD GATE ──
-    │
-    ▼
-3. GENERATE     Spec → Python, never from the raw PDF. Shown
-                beside the spec it implements. A human reads it
-                and approves it.  ── HARD GATE ──
-    │
-    ▼
-4. RUN          Isolated subprocess: import allowlist, CPU limit,
-                wall-clock timeout, static AST check first.
-    │
-    ▼
-5. AUDIT        Six checks.
-    │
-    ▼
-  VERDICT       REPLICATES · WEAKENED · FAILS · NOT_TESTABLE
-```
-
-### Two gates, not one
-
-The static check proves the generated code is *safe* and *causal*. It cannot
-prove the code implements the strategy under review — safe code that computes
-the wrong thing passes every automated test there is. So a person reads it
-against the specification before it runs, and the verdict stays locked until
-they do. Regenerating withdraws the approval: it belongs to the code that was
-read, not to the session.
-
-One deliberate escape. The audit can be run **without** the cross-engine
-check, for when the model is slow or unreachable. It runs five checks instead
-of six and says so on the verdict card, because a skipped check that reads as
-a pass is worse than no check at all.
-
-### Why the spec sits in the middle
-
-Generating code straight from a PDF leaves no way to check whether the AI
-understood the paper — you can only check that the code runs. Inserting a
-structured spec gives three descriptions of the same strategy — the paper's
-English, the spec, and the code — which must all agree. Disagreement becomes
-a detectable bug instead of a silently wrong number.
-
-## What the reviewer actually sees
-
-The confirmation step is the product, so it is not a JSON dump. Stage 2 shows:
-
-- **The entire strategy written out in English** — universe, signal, ranking,
-  sizing, timing, costs, and the claim being tested. It is rendered *from the
-  spec*, never written by a model, so the prose cannot drift from what will be
-  backtested. Assumed and inferred fields are marked inline, in the sentence
-  that depends on them.
-- **Everything that will compromise the test**, graded. Not only *did we read
-  the paper correctly?* but *can we honestly test it with the data we have?* —
-  universe shortfall, contracts with no free feed, insufficient history,
-  missing pre-publication data, survivorship. Blocking problems are separated
-  from ones that merely shape the answer.
-- **A correction for every field the paper did not state.** The reviewer can
-  overrule the extractor, and the correction is what gets backtested. It is
-  recorded in the spec's own notes so a changed parameter travels with the
-  verdict. Confidence is deliberately *not* promoted to "explicit" on an edit:
-  the paper still does not state it, and laundering a human guess into a
-  citation is the exact failure this tool exists to catch.
-
-## The six checks
-
-| Check | Catches |
-|---|---|
-| Look-ahead bias | Using information that did not exist yet. Blinding test: delete the future, require the past to be unchanged. |
-| Transaction costs | Strategies profitable on paper and loss-making when traded. Sweeps the cost curve and finds the break-even. |
-| Out-of-sample | Effects that stop working the moment they are published. |
-| Parameter sensitivity | Results that need one lucky parameter. A real effect is a plateau; a fluke is a spike. |
-| Multiple testing | Every variant tried raises the significance bar. **The tool gets harder to please the more you fiddle with it.** |
-| Cross-engine agreement | Our hand-written engine vs the AI-generated code, from the same spec. If two independent implementations disagree, one is wrong. |
-
-Plus a check that runs before any of them: **quote verification**. Every
-non-assumed field claims a verbatim sentence from the paper, and the tool
-confirms that sentence actually exists. A field citing words nobody wrote is a
-fabricated citation, whether an AI or a person produced it — see below.
-
-The verdict names the failure that destroys most of the claim, not whichever
-check happened to run first. A strategy that was never statistically
-significant leads with that, rather than arguing about its transaction costs.
-
-## Two modes, deliberately separated
-
-**Replication** locks every parameter to the paper's own values and answers
-one question. **Robustness** lets you vary settings but never returns a single
-number — only the distribution across the whole sweep. If a user could spin
-the dials and screenshot the best result, the tool would be a machine for
-manufacturing exactly the overfitting it exists to detect.
-
-## Validation
-
-The engine is checked against **AQR's own published factor returns**, from an
-independently written implementation:
-
-| Our strategy | Reference series | Months | Correlation |
-|---|---|---|---|
-| Momentum | Ken French `UMD` (Dartmouth) | 663 | **0.718** |
-| Momentum | AQR `MOMLS_VME_US90` | 652 | **0.719** |
-| Time-series momentum | AQR `TSMOM^CM` | 331 | **0.680** |
-| *AQR vs Ken French* | *two professional providers of the same factor* | *652* | ***0.917*** |
-
-That last row is the context that matters: two well-resourced firms building
-the same published factor from full CRSP data agree at 0.917, not 1.0. That is
-the realistic ceiling for any independent implementation, and we reach ~80% of
-it using 108 survivorship-biased tickers from a free data source.
-
-### Correlation is not magnitude
-
-Correlation says we are measuring momentum. It does not say we are measuring
-all of it, and the gap is large enough to change an answer:
-
-| | Sharpe, same 663 months |
-|---|---|
-| Ken French `UMD`, full CRSP | **0.49** |
-| Ours, 108 current large caps | **0.24** |
-
-We track the factor's direction and capture about half its strength. The
-missing half is structural rather than a bug: momentum is concentrated in
-smaller names and in firms that later failed, which is exactly what a list of
-today's survivors leaves out. Widening the list does not fix it — a 487-name
-universe tracked `UMD` *better* (correlation 0.769) and scored *lower* (Sharpe
-0.13), because the added breadth arrives mostly after 2000, in the years
-momentum stopped working.
-
-The consequence is stated plainly because it cuts against our own results:
-**a FAILS on an equity paper is partly a statement about this universe.**
-Run our own audit arithmetic over Ken French's series and momentum passes both
-of the checks our spec fails — t=4.63 against a 1.96 bar, and 53% of its
-in-sample Sharpe retained after 1993. Verdicts reached on a fraction of a
-paper's cross-section carry that caveat on the card, and
-`tests/test_universe_power.py` measures the attenuation rather than asserting
-it in prose.
-
-Independent checks on the components:
-
-| Component | Checked against | Result |
-|---|---|---|
-| Multiple-testing bar | `scipy.stats.norm.ppf` | exact to 1e-12 |
-| Sharpe, volatility, hit rate | hand-computed closed forms | exact |
-| Max drawdown | hand-computed peak-to-trough | exact, after a fix |
-| Price data | CRSP total market (Ken French) | corr **0.944**, vol 16.4% vs 15.8% |
-
-A tool that audits other people's backtests has no business shipping an
-unaudited one. **243 tests**, including the causality of every signal kind,
-cost accounting, drawdown arithmetic, both AQR reproductions, the Streamlit
-interface driven end to end — and a test that the audit is *capable of
-passing* a strategy that genuinely works, so it cannot silently become a
-machine that always says no.
-
-## What the papers show
-
-Measured, not intended. Every number below comes from a run on the data the
-tool can actually obtain.
-
-**Reference papers** — hand-written specs, independently known answers:
-
-| Paper | Verdict | Leading reason | Shape of the result |
-|---|---|---|---|
-| Jegadeesh & Titman (1993) | **FAILS** | t=0.73 vs 1.96 | Sharpe 0.10 net; also decays after publication (0.35 → −0.07). Tested on 11% of the paper's universe — read with the caveat above |
-| Time-series momentum (2012) | **FAILS** | t=1.16 vs 1.96 | Passes the other four checks outright. Sharpe 0.22 against AQR's own far stronger series; roll gaps are the gap |
-| Short-term reversal | **FAILS** | Edge gone by 20bps | **Overwhelmingly real and untradeable**: t=9.69, gross Sharpe 1.29, 90x turnover a year |
-| Technical trading rules (1992) | **FAILS** | t=0.28 vs 1.96 | Sharpe 0.05. Never distinguishable from luck; dead at 5bps besides |
-
-**Real papers**, extracted by the pipeline from PDF:
-
-| Paper | Verdict | What it shows |
-|---|---|---|
-| *Physical approach to price momentum* (arXiv 1208.2775) | **WEAKENED** | t=4.91, Sharpe 0.65, +8.3%/yr — and 41x turnover eats all of it. In-sample 0.78 → 0.11 after publication |
-| *Reward-risk momentum* (arXiv 1403.6093) | **FAILS** | t=−0.17 |
-| *Spatio-Temporal Momentum* (arXiv 2302.10175) | **FAILS** | t=0.14 |
-| *Physical Momentum, Indian market* (arXiv 2302.13245) | **NOT_TESTABLE** | Refused, with the reason named: no universe configured for that asset class |
-
-Three distinct *reasons*, which is the more useful axis than the verdict label:
-
-- **Real but untradeable** — short-term reversal. A t-statistic of 9.69 puts
-  the effect beyond argument. It still loses money, because it turns over
-  ninety times a year and the edge is gone by twenty basis points.
-- **Never real** — technical trading rules. t=0.28. There is nothing here to
-  trade at any cost level.
-- **Real but decayed** — *Physical approach to price momentum*. Significant,
-  genuine, and most of it gone by the time you have paid to trade it.
-
-**No paper currently returns REPLICATES.** That is a property of the universe
-rather than of the literature — see *Correlation is not magnitude* — and the
-honest thing is to say so rather than to hunt for a construction that passes.
-
-## Running it
+From the repository root:
 
 ```bash
-python3.13 -m venv .venv
-.venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run app.py
 ```
 
-Opens at `http://localhost:8501`. Stop it with `Ctrl+C`.
+Open http://localhost:8501.
 
-The AI layer shells out to the Claude Code CLI (`claude -p`), so it needs no
-API key. The backend sits behind a `Protocol`, so swapping to the Messages
-API is one class. Opus is the default: extraction is the step everything
-downstream inherits its errors from.
-
-Extraction takes about **three minutes** on a full paper, so a spec already
-produced for the same PDF is reused rather than re-bought — 183s becomes
-0.8s. The reuse is stated on screen rather than implying a fresh reading, and
-**quotes are re-verified against the document every time**, cached or not, so
-a stale spec cannot pass unnoticed.
+Re-run the offline suite with:
 
 ```bash
-.venv/bin/pytest                # 243 tests
-.venv/bin/pytest -m "not slow"  # skip the ones that load real price history
+.venv/bin/python -m pytest tests/rp -q --tb=line
 ```
 
-## The verifier caught its own author
+Extraction calls the Claude Code CLI (`claude`) with the model you pick in the sidebar. Each call is cached under `data/kb/llm_cache/` and appended to `reports/llm_usage.jsonl`. The Supervisor tab reads that log.
 
-The reference specs were originally hand-written, on the assumption that a
-human transcribing a paper is more trustworthy than an AI reading one. When
-the real Jegadeesh & Titman PDF was finally run through the pipeline, the
-comparison was not close:
+## From launch to a finished run
 
-| Spec for the same paper | Quotes verified against the text |
+The sidebar caption is the path: Library, then Paper & spec, then Review queue, then Code, then Results. Thorough extraction is the default. Single analyst is the shorter path.
+
+### Library
+
+On the Library tab, choose a PDF and click **Add to library**. The app reads the PDF, stores a copy, and records the paper in the knowledge base by file hash. The sidebar then lists it as `id: title`. Select that paper. Until a paper is selected, the other tabs wait.
+
+### Thorough extraction
+
+Leave **Extraction** on **Thorough**. On Paper & spec, click **Run thorough extraction**.
+
+The run proceeds in this order. Finished steps are stored on the paper, so a later click reuses them.
+
+1. **Analyst A** reads the paper into a specification (`prompts/v2/extract_spec.md`). Each field is `stated`, `derived`, `assumed`, or `unknown`, with a page and a verbatim quote on stated and derived fields. The specification lists strategy variants and reported results (table, row, column, page).
+2. **Analyst B** reads the same paper on its own (`prompts/v2/analyst_b.md`). It does not see Analyst A's specification.
+3. **Citation checks** are code. A quote has to sit on the cited page, and a number has to appear in that quote at the printed precision.
+4. A field-level diff compares the two specifications. The **spec reviewer** (`prompts/v2/spec_reviewer.md`) sees each disagreement with the cited pages, in batches of 25 and at most four calls. It may settle a disagreement only when the quote check passes: the quote is on the cited page, it contains the chosen value, and it does not contain the rejected value. Sample dates, the chosen variant, universe fields, a result's metric, gross-or-net, and raw-versus-alpha label, and any assumed or unknown field, stay open for you.
+5. The **reviser** (`prompts/v2/reviser.md`) gets at most two rounds, and only for a citation check that is still open. A patch is applied when its quote is on the cited page and contains the value.
+6. The merged specification is saved. Auto-settled fields and open items are written to the Review queue.
+7. The **supervisor** (`prompts/v2/supervisor.md`) makes one read-only pass. It adds notes for you. The specification stays as saved.
+
+The page then shows the family, the chosen variant, and a table of every field: value, status, citations, and the citation-check verdict. Reported results are listed underneath, with a flag when a row belongs to a variant other than the chosen one. An expander shows the raw JSON.
+
+### Review queue
+
+Open the Review queue. It lists disagreements, citation checks that remain, and supervisor notes.
+
+- **Use analyst A** or **Use analyst B** writes that reading into a new specification version.
+- **Reject** leaves Analyst A's value in place and closes the item.
+- **Or set a different value**, then **Save value**, writes the value you typed.
+- A supervisor note has **Dismiss**.
+- An auto-settled field shows the reviewer's choice and quote. **Undo settlement** swaps in the other analyst's value and marks the item reversed.
+
+Code, Results, and Variables open once the queue has no open items and every assumed or unknown field is approved.
+
+### Approve the specification
+
+Back on Paper & spec, the Assumptions section lists every assumed or unknown field. Edit the value if you want, tick **Approve** on each one, and click **Approve spec**. That saves a new specification version. The first approved version is the baseline. The sidebar **Spec version** menu selects which version the other tabs use.
+
+### Code
+
+Open the Code tab. The source is filled from a template for the specification's family (`cross_sectional_jk`, `time_series_momentum`, `ml_market_timing`, or `factor_sort_2x3`). Every constant is tagged `# spec: <path>`. The tab shows the source, a binding table (constant, spec path, value, status), and the template check: each binding is used, and `run()` has no unbound number. Under that, it lists the checks that run with the strategy.
+
+### Results
+
+On Results, choose a universe and a one-way cost in basis points. The cost starts from the specification. Click **Run**.
+
+The page then shows:
+
+- the replication level, the family, and the universe
+- a Disclosures panel for this run
+- **Paper vs ours**: result id, metric, the paper's number, ours, the difference, the period, and a status. The comparison uses the chosen variant, the same metric, gross or net as reported, raw return or CAPM alpha as reported, and the paper's sample window. The pass rule is the replication check: the gap is within two combined standard errors, the sign matches, and significance at 5% matches
+- **Likely reasons for any gap**, computed from this run's data and the specification
+- a growth-of-1 chart of the strategy and the benchmark
+- strategy stats and benchmark stats
+- the six checks, each in its own expander: look-ahead, replication, transaction costs, significance, out-of-sample, and parameter sensitivity. A check shows its status (`pass`, `fail`, `warn`, or `n/a`), the method, the details, and a cross-check when one was recorded
+
+For a price-panel family the benchmark is equal-weight over the same returns. For the market-timing family the benchmark is buy-and-hold of the market series used in the run.
+
+The run writes a manifest. The page names the run id. Click **Draft gap note** to ask for a short paragraph (`prompts/v2/results_analyst.md`). The paragraph appears when every figure in it is already in the comparison or the gap table.
+
+### Single analyst
+
+Set **Extraction** to **Single analyst**. On Paper & spec, click **Run single-analyst extraction**. Analyst A runs once and the specification is saved. There is no second analyst, reviewer, reviser, or supervisor pass, and the Review queue stays empty from that run. Approve the assumptions, then use Code and Results as above.
+
+## Sidebar
+
+- **Paper** selects the stored paper. **Spec version** appears once a specification exists. The latest version is selected; the baseline is marked.
+- **Model** is `sonnet`, `opus`, or `haiku`. **Model per role** sets the model for Analyst A, Analyst B, Spec reviewer, Reviser, Supervisor, Strategy page, Fact-checker, and Results note. A new session starts each role on the model selected above.
+- **Extraction** is Thorough or Single analyst.
+- **What a thorough run does** restates the two-analyst path.
+
+## Tabs
+
+| Tab | What you see |
 |---|---|
-| Hand-written by the author | **31%** — 9 of 13 quotes did not exist |
-| Extracted by Claude | **100%** — 0 of 12 fabricated |
+| Library | The PDF uploader and **Add to library**. Tables of papers, specification versions, runs, and notes. A note box and **Add note**. |
+| Paper & spec | The extraction button for the sidebar mode, the field table with citation checks, reported results, raw JSON, and the assumption approval form. |
+| Strategy page | **Generate strategy page** writes the page (`prompts/v2/strategy_page.md`) and stores it on the specification. Sections, in order: Core idea, Intuition, Mechanics, The authors' arguments, Results, Limitations. Paper sentences carry page chips. A referee note is shown apart from the paper's sentences. In Thorough mode the fact-checker (`prompts/v2/fact_checker.md`) adds a line under each paper sentence on whether the quote supports it. |
+| Code | The generated template, bindings, template check, and the list of checks that run with the strategy. Shown after the queue is settled and the specification is approved. |
+| Results | Universe, cost, **Run**, then paper versus ours, gap reasons, the chart, stats, the six checks, disclosures, and **Draft gap note**. |
+| Variables | The baseline value of each parameter and execution field is locked. Edit a value, choose a universe and a cost, and click **Re-run with overrides**. The page shows the diff against the baseline, then the same results view. Each variant counts toward the multiple-testing bar. A table lists runs for this paper. |
+| Golden set | Stored reports for `jt`, `tsmom`, `umd`, and `kmz`. Each shows the replication level, the comparison table, disclosures, notes, and the raw JSON. The tables are written up in [docs/golden-results.md](docs/golden-results.md). |
+| Supervisor | Supervisor notes from a thorough extraction, with severity and path. The agent trace lists each step with tokens in, tokens out, seconds, and time. The token log groups `reports/llm_usage.jsonl` by role. |
+| Review queue | Open disagreements, citation checks, supervisor notes, and auto-settled fields, with the buttons described above. |
 
-The human had paraphrased from memory: a cited cost assumption of *"returns
-are reported before transaction costs"* appears nowhere in the paper, which in
-fact reports a 9.29% annual return net of a 0.5% one-way cost. Three
-parameters were wrong as a result.
+## Where files are written
 
-Quote verification now runs automatically after extraction, and a test asserts
-the shipped reference spec stays at 100%. The lesson is the project's own
-thesis applied to itself: **do not trust a claim because of who made it —
-check it against the source.**
+Paths are relative to the repository root (`replicator/config.py`).
 
-## Bugs the verification passes found
+| Path | Contents |
+|---|---|
+| `data/papers/` | The uploaded PDF, under its original file name |
+| `data/kb/kb.sqlite` | Knowledge base: papers, specification versions, code, runs, pages, notes, review items, agent trace |
+| `data/kb/papers/<sha256>.pdf` | The stored copy of the PDF |
+| `data/kb/llm_cache/` | Cached model responses |
+| `data/kb/runs/<id>/` | Run artifacts (`returns`, `gross`, `benchmark`, `weights_tail` as Parquet) and `manifest.json` |
+| `reports/exports/run-<id>/` | The same run folder, plus `spec.json` and `strategy.py` |
+| `reports/llm_usage.jsonl` | One JSON line per model call: role, tokens, duration |
+| `reports/golden/jt.json` | Jegadeesh and Titman golden report |
+| `reports/golden/tsmom.json` | Moskowitz, Ooi and Pedersen golden report |
+| `reports/golden/umd.json` | UMD golden report |
+| `reports/golden/kmz.json` | Kelly, Malamud and Zhou golden report |
+| `data/reference/` | Reference series used by the golden reports and the pipeline |
+| `data/cache/prices/` | Cached price panels |
+| `prompts/v2/` | Role prompts |
 
-Validating against external sources surfaced three real defects:
+The manifest (`replicator.run_manifest.v1`) records the PDF hash, the specification, the generated-code digest, data provenance, library versions, and the check and gap summaries for that run.
 
-1. **Max drawdown ignored your starting capital.** The equity curve began at
-   the first return rather than at 1.0, so a strategy losing money from day one
-   measured its drawdown from an already-depressed peak: −10% then −10%
-   reported −10%, not the −19% you were actually down.
-2. **Zero volatility zeroed every statistic.** A degenerate-input guard fired
-   on `std == 0` and blanked return, drawdown and hit rate along with Sharpe —
-   reporting a steadily losing strategy as flat.
-3. **Long/short legs were not balanced.** Percentile thresholds gave the long
-   leg 11 names and the short leg 10 out of 108: a persistent ~5% net long
-   position in a supposedly market-neutral book, worth **+0.9%/yr of borrowed
-   equity beta** against a +3.1% gross strategy return. Nearly a third of the
-   reported "momentum profit" was market exposure. Fixing it *raised*
-   correlation with both reference factors, which is the confirmation that it
-   was a real bug.
+## Documents
 
-A later pass, driven by the question *"why does nothing ever replicate?"*,
-found five more:
-
-4. **The out-of-sample check reported decay that had not happened.** Retention
-   was hard-coded to zero whenever in-sample Sharpe was non-positive, so a
-   strategy that lost money in the paper's own window and made money afterwards
-   was reported as *"Decayed 100% after publication… substantially weaker than
-   advertised"*. One shipped paper hit this exactly: in-sample −0.02,
-   out-of-sample **+0.85**. Losing in both periods is now named for what it is
-   rather than dressed up as decay, and an improvement is no longer a failure.
-5. **A minimum-history guard was applied on only one side of the split.** The
-   check required a year of post-publication data and nothing at all before it.
-   Brock, Lakonishok & LeBaron published in 1992 and our Dow history starts in
-   January 1992, so a Sharpe computed from **54 days** was published on the card
-   as a 100% decay finding.
-6. **A percentage return was taken across zero.** WTI settled at **−$37.63** on
-   2020-04-20. `pct_change` across that sign flip produced a −306% day and a
-   +127% day — two moves larger than anything that happened — and inflated
-   crude's measured volatility to 77% against Brent's 38% for the same
-   commodity. Non-positive marks are now dropped and the drop recorded.
-7. **A rate limit was cached as a delisting.** One throttled download wrote
-   *"possibly delisted"* markers for **354 live companies**, and the loader
-   honours those for seven days. A universe that quietly loses names is the
-   precise failure this module claims to prevent. A request that fails now
-   leaves the negative cache untouched.
-8. **The verdict led with the wrong reason.** The one-line explanation was
-   whichever check happened to fail first in list order, so a strategy with a
-   t-statistic of **0.28** was reported as *"edge disappears at 5 bps"* —
-   arguing about trading costs for an effect that was never distinguishable
-   from luck. Failures are now ranked by how much of the claim they destroy.
-
-And one that the fix for #4 introduced, caught before it shipped:
-
-9. **A nullable field reached a format string.** Splitting the out-of-sample
-   check left `retained` unset on the "no edge in either period" branch, which
-   is still an *applicable* check — and the verdict card renders a delta from
-   that field for any applicable check. The tab raised `TypeError` on exactly
-   the papers the fix was written for. The interface had no test coverage at
-   all, which is how a data-contract change reached the screen; it now has
-   `tests/test_app.py`, which drives the real UI through its own buttons.
-
-## Stated limitations
-
-- **Survivorship bias, and the attenuation it causes.** Free data gives
-  *today's* index members, not historical membership, so backtests silently
-  include only survivors. Measured against Ken French's UMD, this costs about
-  **half the Sharpe** of the effect being tested — enough to turn a real
-  result insignificant. There is no clean free fix, and widening the ticker
-  list makes it worse rather than better (see *Correlation is not magnitude*).
-  Verdicts reached on a fraction of a paper's universe say so on the card.
-- **No paper in the corpus currently returns REPLICATES.** Given the point
-  above, that is a fact about the data rather than a discovery about the
-  literature, and it should not be presented as one.
-- **The schema is narrow, deliberately.** The controlled vocabularies express
-  1,152 combinations, and the space of published strategies is not bounded.
-  Four of five real arXiv papers reported a mismatch: an R-ratio from an
-  ARMA-GARCH model, the output of a Sharpe-optimised neural network,
-  mass-weighted momentum, an Indian equity universe. The extractor records
-  each as a schema mismatch rather than approximating quietly, and the gate
-  refuses what it cannot express — but *refusing* is not the same as
-  *covering*. The next step is generating the signal while keeping the
-  execution machinery fixed, which widens coverage without giving up
-  look-ahead control.
-- **Futures roll gaps.** Yahoo's continuous contracts stitch months together
-  without back-adjustment. This depresses our measured Sharpe against
-  properly roll-adjusted series, and is why our TSMOM number sits below AQR's.
-- **Partial sandbox.** Generated code runs in an isolated subprocess with an
-  import allowlist and resource limits, not a container. Proportionate to the
-  threat of *wrong* AI code; not proof against a hostile attacker.
-- **Extraction is imperfect.** The AI will misread some papers. The human
-  confirmation step is the mitigation, not a cure.
-- **Papers needing data we do not have** — accounting data, order-book data,
-  proprietary datasets — are refused with a reason rather than approximated.
+| Doc | Contents |
+|---|---|
+| [docs/plan.md](docs/plan.md) | The plan: phases, research, and the agent hierarchy |
+| [docs/design.md](docs/design.md) | Interface contract for the package |
+| [docs/research.md](docs/research.md) | Tools, data sources, and the architecture |
+| [docs/audit.md](docs/audit.md) | Audit of the earlier tool |
+| [docs/golden-results.md](docs/golden-results.md) | Golden-set tables |
+| [docs/agent-evaluation.md](docs/agent-evaluation.md) | Offline checks of the agent path |
+| [docs/agent-report.md](docs/agent-report.md) | Build log |
+| [docs/progress.md](docs/progress.md) | Requirement status |
+| [docs/review-wave1.md](docs/review-wave1.md) | Review notes from the build |
 
 ## Layout
 
 ```
-referee/
-  spec.py          the Strategy Spec: the contract between paper and code
-  papers.py        four reference papers with independently known answers
-  describe.py      the spec written out in full English, for the reviewer
-  feasibility.py   everything that will compromise a test, graded
-  data/            universes and cached price loading
-  engine/          backtest engine and the execution sandbox
-  ai/              LLM client, extraction, code generation, static checks
-  audit/           the six checks and the verdict
-  pipeline.py      the five stages, and the two human gates
-prompts/           versioned system prompts, shown in the UI
-tests/             243 tests, including the UI driven end to end
-app.py             Streamlit interface
+app.py            entry point (streamlit run app.py)
+replicator/       data, engine, checks, spec, ingest, extract, codegen, agents, kb, pipeline, golden, ui
+prompts/v2/       role prompts
+tests/rp/         offline tests
+reports/golden/   golden reports
+reports/exports/  per-run export folders
 ```

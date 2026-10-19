@@ -1,0 +1,581 @@
+{
+ "paper": {
+  "citation": "Kelly, Malamud & Zhou (2024), The Virtue of Complexity in Return Prediction, J. Finance 79(1)",
+  "numbers": {
+   "12|linear_z1e3": {
+    "R2": -3.8,
+    "SR": 0.46,
+    "SR_t": 4.4,
+    "IR_mkt": 0.33,
+    "IR_mkt_t": 3.1
+   },
+   "12|nonlinear_P12000": {
+    "R2": 0.6,
+    "SR": 0.47,
+    "SR_t": 4.5,
+    "IR_mkt": 0.31,
+    "IR_mkt_t": 2.9,
+    "IR_lin": 0.26,
+    "IR_lin_t": 2.5
+   },
+   "60|linear_z1e3": {
+    "R2": -0.5,
+    "SR": 0.44,
+    "SR_t": 4.1,
+    "IR_mkt": 0.1,
+    "IR_mkt_t": 0.9
+   },
+   "60|nonlinear_P12000": {
+    "R2": 0.5,
+    "SR": 0.42,
+    "SR_t": 3.9,
+    "IR_mkt": 0.25,
+    "IR_mkt_t": 2.3,
+    "IR_lin": 0.27,
+    "IR_lin_t": 2.5
+   },
+   "120|linear_z1e3": {
+    "R2": 0.1,
+    "SR": 0.49,
+    "SR_t": 4.4,
+    "IR_mkt": 0.13,
+    "IR_mkt_t": 1.2
+   },
+   "120|nonlinear_P12000": {
+    "R2": 0.3,
+    "SR": 0.41,
+    "SR_t": 3.7,
+    "IR_mkt": 0.24,
+    "IR_mkt_t": 2.2,
+    "IR_lin": 0.24,
+    "IR_lin_t": 2.2
+   }
+  },
+  "source": "p.495 Table I (PDF p.37)",
+  "quote": "The annualized out-of-sample Sharpe ratio of the strategy is 0.46 with a t-statistic of 4.4 (linear, z=10^3, T=12)"
+ },
+ "ours": {
+  "12|linear_z1e3": {
+   "R2": -1.715901926974217,
+   "SR": 0.4590095423963631,
+   "SR_t": 4.354546865172389,
+   "max_loss_sd": 6.315928108410657,
+   "IR_mkt": 0.3260902089346934,
+   "IR_mkt_t": 3.0603359398971683,
+   "n_months": 1080
+  },
+  "12|nonlinear_P12000": {
+   "R2": 1.7208319770072298,
+   "SR": 0.4666704007177841,
+   "SR_t": 4.427224148555021,
+   "max_loss_sd": 7.440615937245246,
+   "IR_mkt": 0.3071267233637036,
+   "IR_mkt_t": 2.8823648299143967,
+   "IR_lin": 0.26714990382253173,
+   "IR_lin_t": 2.512426288272869,
+   "n_months": 1080
+  },
+  "60|linear_z1e3": {
+   "R2": 1.6464876813190532,
+   "SR": 0.4416860086356583,
+   "SR_t": 4.096027538885316,
+   "max_loss_sd": 7.43059046828584,
+   "IR_mkt": 0.10211893880774435,
+   "IR_mkt_t": 0.9355713489859324,
+   "n_months": 1032
+  },
+  "60|nonlinear_P12000": {
+   "R2": 0.6768375258631676,
+   "SR": 0.38810015562964745,
+   "SR_t": 3.5990927813518594,
+   "max_loss_sd": 8.3981757183069,
+   "IR_mkt": 0.2329663752530402,
+   "IR_mkt_t": 2.1343412740920553,
+   "IR_lin": 0.24557666780794868,
+   "IR_lin_t": 2.2590775435938255,
+   "n_months": 1032
+  },
+  "120|linear_z1e3": {
+   "R2": 1.8142739386740159,
+   "SR": 0.4865484330919747,
+   "SR_t": 4.378935897827772,
+   "max_loss_sd": 6.90684731704082,
+   "IR_mkt": 0.12992853294239806,
+   "IR_mkt_t": 1.1549237943492292,
+   "n_months": 972
+  },
+  "120|nonlinear_P12000": {
+   "R2": 0.40992566762691585,
+   "SR": 0.3693905802208165,
+   "SR_t": 3.3245152219873475,
+   "max_loss_sd": 9.337808389000681,
+   "IR_mkt": 0.2287422845049769,
+   "IR_mkt_t": 2.033270915678847,
+   "IR_lin": 0.22627589536459655,
+   "IR_lin_t": 2.0166680622416133,
+   "n_months": 972
+  },
+  "12|linear_z0+": {
+   "R2": -8637.383128193129,
+   "SR": -0.106516095457755,
+   "SR_t": -1.010500407343264,
+   "max_loss_sd": 16.162793854670138,
+   "IR_mkt": -0.11378011464639967,
+   "IR_mkt_t": -1.0678191634012928,
+   "n_months": 1080
+  }
+ },
+ "p_grid_T12_z1e3": {
+  "2": {
+   "R2": 0.0010623713654506206,
+   "SR": 0.014534067089189246,
+   "SR_t": 0.1378822670025948,
+   "max_loss_sd": 7.087659059786378,
+   "IR_mkt": 0.005052193965306896,
+   "IR_mkt_t": 0.047414520104333356,
+   "n_months": 1080
+  },
+  "12": {
+   "R2": 0.008631775974065614,
+   "SR": 0.09219305287366977,
+   "SR_t": 0.8746200945753845,
+   "max_loss_sd": 9.575980898062877,
+   "IR_mkt": 0.0410969379207163,
+   "IR_mkt_t": 0.3856921572388552,
+   "n_months": 1080
+  },
+  "120": {
+   "R2": 0.12669989695592188,
+   "SR": 0.276771859964057,
+   "SR_t": 2.625688409182766,
+   "max_loss_sd": 10.57940763274979,
+   "IR_mkt": 0.15564767448468805,
+   "IR_mkt_t": 1.4607435584866104,
+   "n_months": 1080
+  },
+  "1200": {
+   "R2": 0.7633380890519952,
+   "SR": 0.40802677504358587,
+   "SR_t": 3.870881866412641,
+   "max_loss_sd": 11.684563396422167,
+   "IR_mkt": 0.25046970653122347,
+   "IR_mkt_t": 2.3506423184466483,
+   "n_months": 1080
+  },
+  "12000": {
+   "R2": 1.7208319770072298,
+   "SR": 0.4666704007177841,
+   "SR_t": 4.427224148555021,
+   "max_loss_sd": 7.440615937245246,
+   "IR_mkt": 0.3071267233637036,
+   "IR_mkt_t": 2.8823648299143967,
+   "n_months": 1080
+  }
+ },
+ "comparison": [
+  {
+   "window_T": 12,
+   "model": "linear_z1e3",
+   "metric": "R2",
+   "paper": -3.8,
+   "ours": -1.716,
+   "diff": 2.084,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z1e3",
+   "metric": "SR",
+   "paper": 0.46,
+   "ours": 0.459,
+   "diff": -0.001,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z1e3",
+   "metric": "SR_t",
+   "paper": 4.4,
+   "ours": 4.355,
+   "diff": -0.045,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z1e3",
+   "metric": "IR_mkt",
+   "paper": 0.33,
+   "ours": 0.326,
+   "diff": -0.004,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z1e3",
+   "metric": "IR_mkt_t",
+   "paper": 3.1,
+   "ours": 3.06,
+   "diff": -0.04,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "R2",
+   "paper": 0.6,
+   "ours": 1.721,
+   "diff": 1.121,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "SR",
+   "paper": 0.47,
+   "ours": 0.467,
+   "diff": -0.003,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "SR_t",
+   "paper": 4.5,
+   "ours": 4.427,
+   "diff": -0.073,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "IR_mkt",
+   "paper": 0.31,
+   "ours": 0.307,
+   "diff": -0.003,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "IR_mkt_t",
+   "paper": 2.9,
+   "ours": 2.882,
+   "diff": -0.018,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "IR_lin",
+   "paper": 0.26,
+   "ours": 0.267,
+   "diff": 0.007,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "nonlinear_P12000",
+   "metric": "IR_lin_t",
+   "paper": 2.5,
+   "ours": 2.512,
+   "diff": 0.012,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "linear_z1e3",
+   "metric": "R2",
+   "paper": -0.5,
+   "ours": 1.646,
+   "diff": 2.146,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "linear_z1e3",
+   "metric": "SR",
+   "paper": 0.44,
+   "ours": 0.442,
+   "diff": 0.002,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "linear_z1e3",
+   "metric": "SR_t",
+   "paper": 4.1,
+   "ours": 4.096,
+   "diff": -0.004,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "linear_z1e3",
+   "metric": "IR_mkt",
+   "paper": 0.1,
+   "ours": 0.102,
+   "diff": 0.002,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "linear_z1e3",
+   "metric": "IR_mkt_t",
+   "paper": 0.9,
+   "ours": 0.936,
+   "diff": 0.036,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "R2",
+   "paper": 0.5,
+   "ours": 0.677,
+   "diff": 0.177,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "SR",
+   "paper": 0.42,
+   "ours": 0.388,
+   "diff": -0.032,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "SR_t",
+   "paper": 3.9,
+   "ours": 3.599,
+   "diff": -0.301,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "IR_mkt",
+   "paper": 0.25,
+   "ours": 0.233,
+   "diff": -0.017,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "IR_mkt_t",
+   "paper": 2.3,
+   "ours": 2.134,
+   "diff": -0.166,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "IR_lin",
+   "paper": 0.27,
+   "ours": 0.246,
+   "diff": -0.024,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 60,
+   "model": "nonlinear_P12000",
+   "metric": "IR_lin_t",
+   "paper": 2.5,
+   "ours": 2.259,
+   "diff": -0.241,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "linear_z1e3",
+   "metric": "R2",
+   "paper": 0.1,
+   "ours": 1.814,
+   "diff": 1.714,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "linear_z1e3",
+   "metric": "SR",
+   "paper": 0.49,
+   "ours": 0.487,
+   "diff": -0.003,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "linear_z1e3",
+   "metric": "SR_t",
+   "paper": 4.4,
+   "ours": 4.379,
+   "diff": -0.021,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "linear_z1e3",
+   "metric": "IR_mkt",
+   "paper": 0.13,
+   "ours": 0.13,
+   "diff": -0.0,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "linear_z1e3",
+   "metric": "IR_mkt_t",
+   "paper": 1.2,
+   "ours": 1.155,
+   "diff": -0.045,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "R2",
+   "paper": 0.3,
+   "ours": 0.41,
+   "diff": 0.11,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "SR",
+   "paper": 0.41,
+   "ours": 0.369,
+   "diff": -0.041,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "SR_t",
+   "paper": 3.7,
+   "ours": 3.325,
+   "diff": -0.375,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "IR_mkt",
+   "paper": 0.24,
+   "ours": 0.229,
+   "diff": -0.011,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "IR_mkt_t",
+   "paper": 2.2,
+   "ours": 2.033,
+   "diff": -0.167,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "IR_lin",
+   "paper": 0.24,
+   "ours": 0.226,
+   "diff": -0.014,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 120,
+   "model": "nonlinear_P12000",
+   "metric": "IR_lin_t",
+   "paper": 2.2,
+   "ours": 2.017,
+   "diff": -0.183,
+   "page": "p.495 Table I (PDF p.37)"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z0+",
+   "metric": "R2",
+   "paper": -9764.0,
+   "ours": -8637.383,
+   "diff": 1126.617,
+   "page": "p.495 Table I / p.494 text 'R2 -9764%'"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z0+",
+   "metric": "SR",
+   "paper": -0.11,
+   "ours": -0.107,
+   "diff": 0.003,
+   "page": "p.495 Table I / p.494 text 'R2 -9764%'"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z0+",
+   "metric": "SR_t",
+   "paper": -1.0,
+   "ours": -1.011,
+   "diff": -0.011,
+   "page": "p.495 Table I / p.494 text 'R2 -9764%'"
+  },
+  {
+   "window_T": 12,
+   "model": "linear_z0+",
+   "metric": "max_loss_sd",
+   "paper": 98.5,
+   "ours": 16.163,
+   "diff": -82.337,
+   "page": "p.495 Table I / p.494 text 'R2 -9764%'"
+  }
+ ],
+ "settings": {
+  "sample": "1929-12-31..2020-12-31 (Goyal-Welch to 202012)",
+  "z": 1000.0,
+  "gamma": 2.0,
+  "T": [
+   12,
+   60,
+   120
+  ],
+  "P_nonlinear": 12000,
+  "P_grid": [
+   2,
+   12,
+   120,
+   1200,
+   12000
+  ],
+  "seeds": 20,
+  "paper_seeds": 1000,
+  "predictors": 15,
+  "runtime_s": 153.6
+ },
+ "data": {
+  "url": "https://github.com/fundops-notes/amit-goyal-asset-pricing-library/raw/main/00_\u6570\u636e\u96c6/WelchGoyal_Updated_Data_to2025.xlsx (sheet Monthly)",
+  "original_source": "Amit Goyal, https://sites.google.com/view/agoyal145 (Welch & Goyal 2008 predictors, updated); site itself serves Google Drive links not fetched",
+  "retrieved_at": "2026-10-19T08:18:57.116507+00:00",
+  "sha256_xlsx": "8d210b779442a5a9206702060aac67c1de4283186c0f167ebdb4488d149be872",
+  "sha256_csv": "f887a07da3f1ce5df205b55706713a6a7b094d1d54257bcae12b11030c4f4311",
+  "vintage_end": "202512",
+  "sample_rows": 1860,
+  "license_note": "Free for academic use per Goyal/Welch site; redistributed via third-party GitHub mirror (not the author); vintage may differ from the JF paper data (to 2020) in revised values."
+ },
+ "notes": [
+  "Seeds: 20 per setting vs the paper's 1,000; nonlinear stats are the mean of per-seed statistics, as in the paper (step iv).",
+  "Data: Goyal updated sheet (vintage to 2025, third-party mirror), truncated at 2020-12; values may be revised vs the paper's vintage.",
+  "Predictor construction (dfy, tms, dfr, dp, dy, ep, de) derived from raw columns by the standard Welch-Goyal definitions; ntis missing before 1926-12.",
+  "Return standardization uses trailing 12-month uncentered rms lagged one month; predictors divided by expanding std (>=36 obs), not demeaned.",
+  "Training-sample RFF/predictor columns are scaled by their training-window std (centered, ddof=0), no demeaning of the regressors beyond that.",
+  "R2 uses uncentered denominator (zero-forecast benchmark); Sharpe is annualized sqrt(12); SR t-stat is the plain t of the mean return.",
+  "IR v. Mkt: OLS alpha/resid-sd of strategy on the vol-standardized market, annualized. IR v. Linear: strategy regressed on the linear z=1e3 strategy.",
+  "DEVIATIONS: Sharpe/IR/t-stats match the paper within ~0.01-0.04 (T=12 and linear rows) but nonlinear T=60/120 Sharpe is ~0.03-0.04 lower and t ~0.3 lower (20 seeds, own standardization conventions).",
+  "DEVIATIONS: out-of-sample R2 differs by 1-2 percentage points (ours less negative for linear rows); R2 is highly sensitive to the forecast scale, so the denominator/standardization convention probably differs. Ridgeless R2 -8637% vs -9764% (same order).",
+  "DEVIATIONS: ridgeless 'Max Loss' 16 sd vs paper 98.5 sd; paper's normalization of max loss is unspecified in what we read. Skew not compared."
+ ]
+}

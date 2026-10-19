@@ -24,7 +24,7 @@ pytestmark = pytest.mark.slow
 streamlit_testing = pytest.importorskip("streamlit.testing.v1")
 AppTest = streamlit_testing.AppTest
 
-APP = str(ROOT / "app.py")
+APP = str(ROOT / "app_v0.py")
 TIMEOUT = 300
 
 
